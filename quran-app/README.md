@@ -1,0 +1,54 @@
+# Hifz: Quran memorization
+
+A small installable web app (PWA) for memorizing the Quran ayah by ayah. You can use it on your phone or computer, and it needs no account. Progress is stored only on the device.
+
+## Features
+
+- **Cumulative build-up looping**: choose a range and the app plays ayah 1, then 1–2, then 1–3 … up to the full range. Each step repeats as many times as you choose, with an optional pause after each repeat so you can recite.
+- **Reciters**
+  - **Idris Abkar**: all 114 surahs. Ayah timings come from mp3quran.net, so looping works straight away.
+  - **Islam Sobhi**: 109 surahs. mp3quran.net doesn't publish ayah timings for this recording, so you mark them once per surah: tap along while the surah plays, once when ayah 1 begins and once at the end of each ayah. The timings are saved on the device. You can save part-way and continue later, or re-mark at any time.
+- **Ayah-by-ayah reading view** in Uthmani script (Amiri Quran font), with an optional English translation (Saheeh International). The ayah being recited is highlighted, and the page can scroll to follow it.
+- **Progress**: mark single ayat or whole surahs as memorized, and see your totals by surah and by juz.
+- **Offline**: the app itself, plus any Quran text and timings you've already opened, are cached for offline use. You can also save a surah's audio for offline playback.
+- Light and dark mode, playback speed, lock-screen media controls, and backup export/import (Settings).
+
+## Running it
+
+It's a static site with no build step. Serve the `quran-app/` folder over HTTP:
+
+```sh
+cd quran-app
+python3 -m http.server 8000
+# open http://localhost:8000
+```
+
+Opening `index.html` directly from disk won't work, because ES modules and the service worker both need HTTP. To publish it, host the folder on any static host (GitHub Pages, Netlify, Cloudflare Pages). Installing it as an app requires HTTPS.
+
+## Data sources
+
+| What | Source |
+| --- | --- |
+| Surah list, Uthmani text, translation, juz boundaries | `api.quran.com/api/v4` |
+| Recitation audio (whole-surah MP3s) | `cdn.mp3quran.net` |
+| Reciter surah lists, Idris Abkar ayah timings | `mp3quran.net/api/v3` |
+
+The audio is one MP3 per surah. Ayah segments are played by seeking to each ayah's start time and stopping at its end time.
+
+## Code layout
+
+```
+index.html            app shell and settings dialog
+css/styles.css        design tokens (light/dark) and layout
+js/app.js             router and views: surah list, surah/practice, marking, progress
+js/player.js          segment player and practice sessions (cumulative / single ayah / whole surah)
+js/marker.js          tap-to-mark ayah timings
+js/api.js             Quran.com and mp3quran.net clients, offline audio
+js/storage.js         localStorage: settings, memorized ayat, timings, backup
+js/ui.js              helpers and icons
+sw.js                 service worker (offline cache)
+```
+
+## Adding a reciter
+
+Add an entry to `RECITERS` in `js/api.js` with the reciter's mp3quran reciter id, moshaf id and server URL. If mp3quran publishes timings for that recording (see `https://mp3quran.net/api/v3/ayat_timing/reads`), set `timingRead` to its read id. Otherwise leave it `null`, and users will mark the timings themselves.
