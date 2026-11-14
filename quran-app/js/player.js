@@ -1,9 +1,8 @@
 // Plays exact time segments of a whole-surah audio file and runs practice sessions.
 //
-// Session modes:
-//   cumulative – ayah `from`, then from..from+1, ... up to from..to; each step `repeats` times
-//   single     – one ayah once
-//   full       – the whole file, `repeats` times
+// A session is a list of steps. Each step plays ayat `from`..`to` as one continuous segment,
+// `repeats` times. `kind` is 'ayah' (a single ayah on its own), 'link' (several ayat read
+// together) or 'full' (the whole file). The app builds the step list; see buildSteps in app.js.
 //
 // The end of a segment is checked on `timeupdate` (keeps firing with the screen off) and on a
 // short interval (precise while the page is visible).
@@ -36,22 +35,21 @@ export class Player {
   snapshot() {
     const s = this.session;
     if (!s) return { active: false, paused: false };
-    const steps = s.mode === 'cumulative' ? s.to - s.from + 1 : 1;
-    const step = s.mode === 'cumulative' ? s.k - s.from + 1 : 1;
-    const doneSegments = (step - 1) * s.repeats + (s.r - 1);
+    const step = s.steps[s.i];
+    const total = s.steps.reduce((n, x) => n + x.repeats, 0);
+    const done = s.steps.slice(0, s.i).reduce((n, x) => n + x.repeats, 0) + (s.r - 1);
     return {
       active: true,
       paused: this.paused,
       gapping: this.gapping,
-      mode: s.mode,
-      from: s.from,
-      to: s.to,
-      k: s.k,
+      kind: step.kind,
+      from: step.from,
+      to: step.to,
       r: s.r,
-      repeats: s.repeats,
-      step,
-      steps,
-      progress: doneSegments / (steps * s.repeats),
+      repeats: step.repeats,
+      index: s.i,
+      count: s.steps.length,
+      progress: done / total,
       meta: s.meta,
     };
   }
@@ -81,10 +79,10 @@ export class Player {
     this.audio.src = src;
   }
 
-  start({ mode = 'cumulative', key, src, timings = null, from = 1, to = 1, repeats = 1, gap = 0, meta = {} }) {
+  start({ key, src, timings = null, steps, gap = 0, meta = {} }) {
     this.stop(false);
     this._setSource(key, src);
-    this.session = { mode, timings, from, to, k: from, r: 1, repeats, gap, meta };
+    this.session = { steps, timings, i: 0, r: 1, gap, meta };
     this.paused = false;
     this._run();
   }
@@ -107,16 +105,16 @@ export class Player {
 
   next() {
     const s = this.session;
-    if (!s || s.mode !== 'cumulative' || s.k >= s.to) return;
-    s.k++; s.r = 1;
+    if (!s || s.i >= s.steps.length - 1) return;
+    s.i++; s.r = 1;
     this.paused = false;
     this._run();
   }
 
   prev() {
     const s = this.session;
-    if (!s || s.mode !== 'cumulative') return;
-    if (s.k > s.from) s.k--;
+    if (!s) return;
+    if (s.i > 0) s.i--;
     s.r = 1;
     this.paused = false;
     this._run();
@@ -139,13 +137,14 @@ export class Player {
   }
 
   _finish() {
+    const { count, meta } = this.snapshot();
     this.token++;
     this.audio.pause();
     this.session = null;
     this.paused = false;
     this.gapping = false;
     this.inSegment = false;
-    this._emit({ done: true });
+    this._emit({ done: true, count, meta });
   }
 
   async _run() {
@@ -155,8 +154,9 @@ export class Player {
       this.gapping = false;
       this._emit();
 
-      const start = s.mode === 'full' ? 0 : s.timings[s.from].start;
-      const end = s.mode === 'full' ? Infinity : s.timings[s.k].end;
+      const step = s.steps[s.i];
+      const start = step.kind === 'full' ? 0 : s.timings[step.from].start;
+      const end = step.kind === 'full' ? Infinity : s.timings[step.to].end;
 
       let finished;
       try {
@@ -167,8 +167,8 @@ export class Player {
       }
       if (!finished || token !== this.token) return;
 
-      if (s.r < s.repeats) s.r++;
-      else if (s.mode === 'cumulative' && s.k < s.to) { s.k++; s.r = 1; }
+      if (s.r < step.repeats) s.r++;
+      else if (s.i < s.steps.length - 1) { s.i++; s.r = 1; }
       else { this._finish(); return; }
 
       if (s.gap > 0) {

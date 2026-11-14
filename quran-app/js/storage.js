@@ -29,6 +29,7 @@ const DEFAULTS = {
   autoscroll: true,
   theme: 'auto',
   repeats: 3,
+  linkRepeats: 2,
   gap: 0,
   speed: 1,
 };
@@ -54,6 +55,14 @@ export function setMemorized(surah, set) {
 // Last practice range, used for "Continue".
 export const getLast = () => read('last', null);
 export const setLast = (v) => write('last', v);
+
+// The practice range for each surah, so the user can move on from where they left off.
+export const getPlan = (surah) => read('plans', {})[surah] || null;
+export function setPlan(surah, plan) {
+  const plans = read('plans', {});
+  plans[surah] = plan;
+  return write('plans', plans);
+}
 
 // Ayah timings a user marked by hand, stored as [[startMs, endMs], ...] (index = ayah - 1).
 export function getTimings(reciterId, surah) {

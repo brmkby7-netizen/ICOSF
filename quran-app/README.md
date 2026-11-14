@@ -4,7 +4,12 @@ A small installable web app (PWA) for memorizing the Quran ayah by ayah. You can
 
 ## Features
 
-- **Cumulative build-up looping**: choose a range and the app plays ayah 1, then 1–2, then 1–3 … up to the full range. Each step repeats as many times as you choose, with an optional pause after each repeat so you can recite.
+- **Range practice**: choose a range (say ayat 1–5), how many times each ayah repeats, and how many times to read the linked ayat together. With each ayah ×3 and linking ×2:
+  1. Ayah 1 ×3
+  2. Ayah 2 ×3, then 1–2 together ×2
+  3. Ayah 3 ×3, then 1–3 together ×2
+  4. …and so on, ending with 1–5 together ×2
+- **Move on**: when you're ready, the range slides forward by one ayah without starting over. You read the new ayah (6) ×3, then the new range (2–6) together ×2. The range is saved per surah, so you can pick up another day. There's an optional pause after each repeat so you can recite.
 - **Reciters**
   - **Idris Abkar**: all 114 surahs. Ayah timings come from mp3quran.net, so looping works straight away.
   - **Islam Sobhi**: 109 surahs. mp3quran.net doesn't publish ayah timings for this recording, so you mark them once per surah: tap along while the surah plays, once when ayah 1 begins and once at the end of each ayah. The timings are saved on the device. You can save part-way and continue later, or re-mark at any time.

@@ -50,6 +50,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -319,8 +321,13 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 :root[data-theme="dark"] .seg button[aria-checked="true"] { background: var(--accent-soft); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .seg button[aria-checked="true"] { background: var(--accent-soft); } }
 
-.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-@media (max-width: 600px) { .grid { grid-template-columns: 1fr 1fr; } }
+.grid { display: grid; gap: 10px; }
+.grid.two { grid-template-columns: 1fr 1fr; }
+.grid.three { grid-template-columns: repeat(3, 1fr); }
+
+.session-choice { display: grid; gap: 6px; }
+.move-on { border-color: var(--accent); color: var(--accent); }
+.move-on:hover { border-color: var(--accent); background: var(--accent-soft); }
 
 .field { display: grid; gap: 4px; font-size: 0.8125rem; color: var(--muted); }
 .field select { color: var(--ink); font-size: 1rem; }
@@ -420,6 +427,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   pointer-events: none;
 }
 .player-inner, .player-progress { pointer-events: auto; }
+.small-btn { min-height: 38px; padding: 0 14px; font-size: 0.9375rem; }
+.small-btn svg { width: 16px; height: 16px; }
 .player > * { max-width: 736px; margin-left: auto; margin-right: auto; }
 
 .player-inner {

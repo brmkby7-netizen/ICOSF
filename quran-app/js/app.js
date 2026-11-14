@@ -62,6 +62,7 @@ const progressBar = (p) => `<span class="bar" role="progressbar" aria-valuenow="
 
 async function route() {
   if (cleanup) { cleanup(); cleanup = null; }
+  if (!player.session) hideBar();
   const [page, arg] = location.hash.replace(/^#\/?/, '').split('/');
   for (const a of document.querySelectorAll('[data-nav]')) {
     a.classList.toggle('active', a.dataset.nav === (page === 'progress' ? 'progress' : ''));
@@ -160,9 +161,9 @@ function selectOptions(max, selected) {
 function renderSurah() {
   const { num, chapter, verses } = current;
   const mem = store.getMemorizedSet(num);
-  const last = store.getLast();
-  const from = last?.surah === num ? last.from : 1;
-  const to = last?.surah === num ? last.to : Math.min(verses.length, 5);
+  const plan = store.getPlan(num);
+  const from = plan ? plan.from : 1;
+  const to = plan ? plan.to : Math.min(verses.length, 5);
 
   view.innerHTML = `
     <a href="#/" class="back">${icons.back}<span>Surahs</span></a>
@@ -181,18 +182,30 @@ function renderSurah() {
       </div>
       <div id="audio-status"></div>
       <div id="practice-controls" hidden>
-        <div class="grid">
+        <div class="grid two">
           <label class="field"><span>From ayah</span><select id="from" data-v="${from}"></select></label>
           <label class="field"><span>To ayah</span><select id="to" data-v="${to}"></select></label>
-          <label class="field"><span>Repeat each step</span>
-            <select id="repeats">${[1, 2, 3, 4, 5, 7, 10].map((v) => `<option value="${v}" ${v === settings.repeats ? 'selected' : ''}>${v}×</option>`).join('')}</select>
+        </div>
+        <div class="grid three">
+          <label class="field"><span>Each ayah</span>
+            <select id="repeats">${countOptions(settings.repeats)}</select>
+          </label>
+          <label class="field"><span>Link together</span>
+            <select id="link">${countOptions(settings.linkRepeats)}</select>
           </label>
           <label class="field"><span>Pause to recite</span>
             <select id="gap">${[0, 1, 2, 3, 5, 8].map((v) => `<option value="${v}" ${v === settings.gap ? 'selected' : ''}>${v ? `${v} s` : 'None'}</option>`).join('')}</select>
           </label>
         </div>
-        <p class="plan muted small" id="plan"></p>
-        <button class="btn primary wide" id="start" type="button">${icons.play}<span>Start build-up</span></button>
+        <div class="session-choice">
+          <button class="btn primary wide" id="start" type="button">${icons.play}<span id="start-label">Start</span></button>
+          <p class="plan muted small" id="plan"></p>
+        </div>
+        <div class="session-choice" id="move-on-box" hidden>
+          <button class="btn wide move-on" id="move-on" type="button"><span id="move-on-label"></span>${icons.next}</button>
+          <p class="plan muted small" id="move-on-plan"></p>
+        </div>
+        <p class="plan muted small" id="end-note" hidden></p>
       </div>
     </section>
 
@@ -221,8 +234,9 @@ function renderSurah() {
     loadAudioState();
   });
 
-  for (const id of ['from', 'to', 'repeats', 'gap']) $(`#${id}`).addEventListener('change', updatePlan);
-  $('#start').addEventListener('click', startBuildUp);
+  for (const id of ['from', 'to', 'repeats', 'link', 'gap']) $(`#${id}`).addEventListener('change', updatePlan);
+  $('#start').addEventListener('click', startRange);
+  $('#move-on').addEventListener('click', moveOn);
 
   $('#ayat').addEventListener('click', (e) => {
     const art = e.target.closest('.ayah');
@@ -362,30 +376,108 @@ function fillRangeSelects(max) {
   to.innerHTML = selectOptions(max, Math.max(t, f));
 }
 
+function countOptions(selected) {
+  return [1, 2, 3, 4, 5, 6, 7, 8, 10, 15, 20]
+    .map((v) => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}×</option>`).join('');
+}
+
 function readRange() {
   let from = Number($('#from').value);
   let to = Number($('#to').value);
   if (from > to) [from, to] = [to, from];
-  return { from, to, repeats: Number($('#repeats').value), gap: Number($('#gap').value) };
+  return {
+    from,
+    to,
+    repeats: Number($('#repeats').value),
+    link: Number($('#link').value),
+    gap: Number($('#gap').value),
+  };
+}
+
+// Full pattern for a range, e.g. 1–3 with each ayah ×3 and linking ×2:
+//   1 ×3 · 2 ×3 · 1–2 ×2 · 3 ×3 · 1–3 ×2
+function rangeSteps({ from, to, repeats, link }) {
+  const steps = [];
+  for (let k = from; k <= to; k++) {
+    steps.push({ kind: 'ayah', from: k, to: k, repeats });
+    if (k > from) steps.push({ kind: 'link', from, to: k, repeats: link });
+  }
+  return steps;
+}
+
+// Moving on from from–to: the new ayah on its own, then the whole new range linked.
+//   2–6: 6 ×3 · 2–6 ×2
+function moveOnSteps({ from, to, repeats, link }) {
+  return [
+    { kind: 'ayah', from: to + 1, to: to + 1, repeats },
+    { kind: 'link', from: from + 1, to: to + 1, repeats: link },
+  ];
+}
+
+function stepsDuration(steps, gap) {
+  let ms = 0, plays = 0;
+  for (const st of steps) {
+    ms += (current.timings[st.to].end - current.timings[st.from].start) * st.repeats;
+    plays += st.repeats;
+  }
+  return ms / settings.speed + Math.max(plays - 1, 0) * gap * 1000;
+}
+
+const span = (a, b) => (a === b ? `${a}` : `${a}–${b}`);
+
+function describeSteps(steps) {
+  const parts = steps.map((st) => `${span(st.from, st.to)} ×${st.repeats}`);
+  return parts.length > 5 ? `${parts.slice(0, 3).join(' · ')} · … · ${parts.at(-1)}` : parts.join(' · ');
 }
 
 function updatePlan() {
   if (!current?.timings) return;
-  const { from, to, repeats, gap } = readRange();
-  const steps = to - from + 1;
-  let ms = 0;
-  for (let k = from; k <= to; k++) ms += (current.timings[k].end - current.timings[from].start) * repeats;
-  ms = ms / settings.speed + (steps * repeats - 1) * gap * 1000;
-  $('#plan').textContent = steps === 1
-    ? `Ayah ${from}, ${repeats}× · ${fmtDuration(ms)}`
-    : `${steps} steps (ayah ${from} → ${from}–${to}), each ${repeats}× · ${fmtDuration(ms)}`;
+  const r = readRange();
+  const max = Number($('#to').options.length);
+  const steps = rangeSteps(r);
+  $('#start-label').textContent = `Start ayat ${span(r.from, r.to)}`;
+  $('#plan').textContent = `${describeSteps(steps)} · ${fmtDuration(stepsDuration(steps, r.gap))}`;
+
+  // "Move on" appears once this range has been practised, until the end of the surah.
+  const plan = store.getPlan(current.num);
+  const started = plan && plan.from === r.from && plan.to === r.to;
+  const canMove = started && r.to < max;
+  $('#move-on-box').hidden = !canMove;
+  if (canMove) {
+    const next = moveOnSteps(r);
+    $('#move-on-label').textContent = `Move on: ayat ${span(r.from + 1, r.to + 1)}`;
+    $('#move-on-plan').textContent = `New ayah ${r.to + 1} ×${r.repeats}, then ${span(r.from + 1, r.to + 1)} together ×${r.link} · ${fmtDuration(stepsDuration(next, r.gap))}`;
+  }
+  const atEnd = started && r.to >= current.verses.length;
+  const end = $('#end-note');
+  end.hidden = !(started && r.to >= max);
+  end.textContent = atEnd
+    ? 'You’ve reached the end of the surah.'
+    : `Mark the timings for ayah ${max + 1} onwards to move on further.`;
 }
 
-async function startBuildUp() {
-  const { from, to, repeats, gap } = readRange();
-  saveSettings({ repeats, gap });
-  store.setLast({ surah: current.num, from, to });
-  await startSession({ mode: 'cumulative', from, to, repeats, gap });
+function rememberRange(r) {
+  saveSettings({ repeats: r.repeats, linkRepeats: r.link, gap: r.gap });
+  store.setPlan(current.num, { from: r.from, to: r.to });
+  store.setLast({ surah: current.num, from: r.from, to: r.to });
+}
+
+async function startRange() {
+  const r = readRange();
+  rememberRange(r);
+  updatePlan();
+  await startSession({ steps: rangeSteps(r), gap: r.gap, title: `ayat ${span(r.from, r.to)}` });
+}
+
+async function moveOn() {
+  const r = readRange();
+  const next = { ...r, from: r.from + 1, to: r.to + 1 };
+  if (!current.timings[next.to]) return;
+  $('#from').value = String(next.from);
+  $('#to').value = String(next.to);
+  rememberRange(next);
+  updatePlan();
+  await startSession({ steps: moveOnSteps(r), gap: r.gap, title: `ayat ${span(next.from, next.to)}` });
 }
 
 async function playOne(n) {
@@ -393,11 +485,11 @@ async function playOne(n) {
     toast(settings.reciter === 'sobhi' ? 'Mark the ayah timings for this surah first.' : 'Timings for this ayah aren’t available yet.');
     return;
   }
-  await startSession({ mode: 'single', from: n, to: n, repeats: 1, gap: 0 });
+  await startSession({ steps: [{ kind: 'ayah', from: n, to: n, repeats: 1 }], gap: 0, title: `ayah ${n}` });
 }
 
 async function playFull() {
-  await startSession({ mode: 'full', from: 1, to: 1, repeats: 1, gap: 0 });
+  await startSession({ steps: [{ kind: 'full', from: 1, to: 1, repeats: 1 }], gap: 0, title: '' });
 }
 
 async function startSession(opts) {
@@ -412,9 +504,7 @@ async function startSession(opts) {
       surah: current.num,
       surahName: current.chapter.name_simple,
       reciter: r.name,
-      title: opts.mode === 'cumulative'
-        ? `${current.chapter.name_simple} ${opts.from}–${opts.to}`
-        : opts.mode === 'single' ? `${current.chapter.name_simple} ${opts.from}` : current.chapter.name_simple,
+      title: `${current.chapter.name_simple} ${opts.title}`.trim(),
     },
   });
 }
@@ -439,9 +529,10 @@ async function toggleOffline(saved) {
 }
 
 function highlight(t, session) {
-  if (!current || session.meta.surah !== current.num || session.mode === 'full' || !current.timings) return;
+  const step = session.steps[session.i];
+  if (!current || session.meta.surah !== current.num || step.kind === 'full' || !current.timings) return;
   let playing = null;
-  for (let k = session.from; k <= session.k; k++) {
+  for (let k = step.from; k <= step.to; k++) {
     const seg = current.timings[k];
     if (seg && t >= seg.start - 50 && t < seg.end) { playing = k; break; }
   }
@@ -530,7 +621,10 @@ async function progressView() {
 
 player.onState((s) => {
   if (s.error) toast(s.error, 5000);
-  if (s.done) toast(s.mode === 'single' ? 'Done.' : 'Session complete. Well done!');
+  if (s.done && current && s.meta?.surah === current.num && $('#plan')) {
+    updatePlan();
+    if (s.count > 1) { showDoneBar(); return; }
+  }
   if (!s.active) {
     bar.hidden = true;
     document.body.classList.remove('has-player');
@@ -542,11 +636,13 @@ player.onState((s) => {
   document.body.classList.add('has-player');
 
   let label;
-  if (s.mode === 'full') label = 'Whole surah';
-  else if (s.mode === 'single') label = `Ayah ${s.k}`;
-  else label = `Step ${s.step}/${s.steps} · ayat ${s.from === s.k ? s.k : `${s.from}–${s.k}`}${s.repeats > 1 ? ` · ${s.r} of ${s.repeats}` : ''}`;
+  if (s.kind === 'full') label = 'Whole surah';
+  else if (s.kind === 'ayah') label = `Ayah ${s.from}`;
+  else label = `Ayat ${s.from}–${s.to} together`;
+  if (s.repeats > 1) label += ` · ${s.r} of ${s.repeats}`;
+  if (s.count > 1) label = `${s.index + 1}/${s.count} · ${label}`;
 
-  const cumulative = s.mode === 'cumulative';
+  const multi = s.count > 1;
   bar.innerHTML = `
     <div class="player-inner">
       <div class="player-info">
@@ -554,18 +650,49 @@ player.onState((s) => {
         <span class="player-label">${s.gapping ? '<em>Your turn, recite…</em> · ' : ''}${label}</span>
       </div>
       <div class="player-ctrls">
-        ${cumulative ? `<button class="icon-btn" data-act="prev" aria-label="Previous step" ${s.k <= s.from ? 'disabled' : ''}>${icons.prev}</button>` : ''}
+        ${multi ? `<button class="icon-btn" data-act="prev" aria-label="Previous step" ${s.index === 0 ? 'disabled' : ''}>${icons.prev}</button>` : ''}
         <button class="icon-btn pp" data-act="toggle" aria-label="${s.paused ? 'Resume' : 'Pause'}">${s.paused ? icons.play : icons.pause}</button>
-        ${cumulative ? `<button class="icon-btn" data-act="next" aria-label="Next step" ${s.k >= s.to ? 'disabled' : ''}>${icons.next}</button>` : ''}
+        ${multi ? `<button class="icon-btn" data-act="next" aria-label="Next step" ${s.index >= s.count - 1 ? 'disabled' : ''}>${icons.next}</button>` : ''}
         <button class="icon-btn" data-act="stop" aria-label="Stop">${icons.stop}</button>
       </div>
     </div>
-    ${cumulative ? `<div class="player-progress"><i style="width:${Math.round(s.progress * 100)}%"></i></div>` : ''}`;
+    ${multi ? `<div class="player-progress"><i style="width:${Math.round(s.progress * 100)}%"></i></div>` : ''}`;
 });
+
+// After a range session: offer to move on (or repeat) right from the bar.
+function showDoneBar() {
+  document.querySelector('.ayah.playing')?.classList.remove('playing');
+  lastHighlighted = null;
+  const { from, to } = readRange();
+  const canMove = !$('#move-on-box').hidden;
+  bar.hidden = false;
+  document.body.classList.add('has-player');
+  bar.innerHTML = `
+    <div class="player-inner done">
+      <div class="player-info">
+        <span class="player-title">Ayat ${span(from, to)} done. Well done!</span>
+        <span class="player-label">${canMove ? `Ready for ayah ${to + 1}?` : 'Practise again or pick a new range.'}</span>
+      </div>
+      <div class="player-ctrls">
+        <button class="btn ghost small-btn" data-done="again">Again</button>
+        ${canMove ? `<button class="btn primary small-btn" data-done="move">Move on ${icons.next}</button>` : ''}
+        <button class="icon-btn" data-done="close" aria-label="Close">✕</button>
+      </div>
+    </div>`;
+}
+
+function hideBar() {
+  bar.hidden = true;
+  document.body.classList.remove('has-player');
+}
 
 bar.addEventListener('click', (e) => {
   const act = e.target.closest('[data-act]')?.dataset.act;
-  if (act) player[act]();
+  if (act) { player[act](); return; }
+  const done = e.target.closest('[data-done]')?.dataset.done;
+  if (done === 'close') hideBar();
+  else if (done === 'again') startRange();
+  else if (done === 'move') moveOn();
 });
 
 // ---------- settings ----------
