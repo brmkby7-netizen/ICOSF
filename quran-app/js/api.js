@@ -52,31 +52,65 @@ export async function getChapters() {
 // Quran.com tajweed markup: <tajweed class=rule>…</tajweed> around letters and
 // <span class=end>١</span> for the ayah number. Rebuild it as safe HTML: only whitelisted
 // tajweed spans survive, all text is escaped, and the ayah number is dropped (we add our own).
+//
+// Some rules wrap only a combining mark (e.g. the superscript alif in ذَٰلِكَ), or start
+// with one. Safari draws a mark that starts its own element on a dotted placeholder circle,
+// so no coloured span may begin with a mark:
+//   – a span of marks only takes in the letter they sit on (that letter gets the colour);
+//   – leading marks of any other span move back onto the previous letter.
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const escape = (s) => s.replace(/[&<>"']/g, (c) => ESC[c]);
+const ALL_MARKS = /^\p{M}+$/u;
+const LEADING_MARKS = /^\p{M}+/u;
+const LAST_CLUSTER = /\P{M}\p{M}*$/u;
 
 function parseTajweed(markup) {
   const src = String(markup || '').replace(/<span class=["']?end["']?>[^<]*<\/span>/g, '');
-  let html = '';
-  let plain = '';
-  let open = 0;
+
+  // 1. Flatten into [{ text, rule }] segments (rule = innermost tajweed class, or null).
+  const segs = [];
+  const stack = [];
   let last = 0;
+  const push = (text) => {
+    if (!text) return;
+    const rule = stack.length ? stack[stack.length - 1] : null;
+    const prev = segs[segs.length - 1];
+    if (prev && prev.rule === rule) prev.text += text;
+    else segs.push({ text, rule });
+  };
   for (const m of src.matchAll(/<(\/?)(tajweed|span)\b([^>]*)>/g)) {
-    const text = src.slice(last, m.index);
-    html += escape(text);
-    plain += text;
+    push(src.slice(last, m.index));
     last = m.index + m[0].length;
-    if (m[1]) {
-      if (open) { html += '</span>'; open--; }
+    if (m[1]) stack.pop();
+    else stack.push(/class=["']?([a-z_]+)/.exec(m[3])?.[1] || null);
+  }
+  push(src.slice(last));
+
+  // 2. Make sure no coloured segment starts with a combining mark.
+  for (let i = 1; i < segs.length; i++) {
+    const seg = segs[i];
+    const prev = segs[i - 1];
+    if (!seg.rule) continue;
+    if (ALL_MARKS.test(seg.text)) {
+      const cluster = LAST_CLUSTER.exec(prev.text)?.[0];
+      if (cluster && cluster.trim()) {
+        prev.text = prev.text.slice(0, -cluster.length);
+        seg.text = cluster + seg.text;
+      }
     } else {
-      const rule = /class=["']?([a-z_]+)/.exec(m[3])?.[1];
-      html += rule ? `<span class="tj tj-${rule}">` : '<span>';
-      open++;
+      const lead = LEADING_MARKS.exec(seg.text)?.[0];
+      if (lead) {
+        prev.text += lead;
+        seg.text = seg.text.slice(lead.length);
+      }
     }
   }
-  const tail = src.slice(last);
-  html += escape(tail) + '</span>'.repeat(open);
-  plain += tail;
+
+  const html = segs
+    .filter((x) => x.text)
+    .map((x) => (x.rule ? `<span class="tj tj-${x.rule}">${escape(x.text)}</span>` : escape(x.text)))
+    .join('');
+  const plain = segs.map((x) => x.text).join('');
   return { html: html.trim(), plain: plain.replace(/\s+/g, ' ').trim() };
 }
 
