@@ -369,16 +369,12 @@ async function loadAudioState() {
     return;
   }
 
-  let timings;
-  if (r.timingRead) {
-    try {
-      timings = await api.getTimings(r, num);
-    } catch {
-      box.innerHTML = notice('Couldn’t load the ayah timings. Check your connection and open this surah again.');
-      return;
-    }
-  } else {
-    timings = store.getTimings(r.id, num);
+  let timings, source;
+  try {
+    ({ timings, source } = await rawTimings(r, num));
+  } catch {
+    box.innerHTML = notice('Couldn’t load the ayah timings. Check your connection and open this surah again.');
+    return;
   }
   if (current?.num !== num || settings.reciter !== r.id) return;
   if (r.timingRead && !Object.keys(timings || {}).length) {
@@ -408,9 +404,10 @@ async function loadAudioState() {
       `<a class="btn" href="#/mark/${num}">Continue marking</a>`,
     ) + `<p class="small muted status-line">${offlineBtn}</p>`;
   } else {
-    box.innerHTML = `<p class="small muted status-line">
-      ${r.timingRead ? 'Ayah timings by mp3quran.net' : `Timings marked by you · <a href="#/mark/${num}">Re-mark</a> · <button class="link" id="clear-timings" type="button">Delete</button>`}
-      · ${offlineBtn}</p>`;
+    const label = source === 'official' ? 'Ayah timings by mp3quran.net'
+      : source === 'auto' ? `Ayah timings detected automatically. If an ayah starts or stops in the wrong place, tap its ${icons.clock} to fix it · <a href="#/mark/${num}">Mark all yourself</a>`
+        : `Timings marked by you · <a href="#/mark/${num}">Re-mark</a> · <button class="link" id="clear-timings" type="button">${api.reciter(settings.reciter).bundled ? 'Use automatic timings' : 'Delete'}</button>`;
+    box.innerHTML = `<p class="small muted status-line">${label} · ${offlineBtn}</p>`;
   }
 
   $('#clear-timings')?.addEventListener('click', () => {
@@ -620,6 +617,16 @@ function highlight(t, session) {
   }
 }
 
+// Where a reciter's timings come from: mp3quran's published timings, the user's own marks,
+// or timings detected automatically and shipped with the app.
+async function rawTimings(r, surah) {
+  if (r.timingRead) return { timings: await api.getTimings(r, surah), source: 'official' };
+  const mine = store.getTimings(r.id, surah);
+  if (mine) return { timings: mine, source: 'mine' };
+  const auto = await api.getBundledTimings(r, surah);
+  return { timings: auto, source: auto ? 'auto' : null };
+}
+
 // ---------- per-ayah timing fixes ----------
 
 function markFixedAyat() {
@@ -672,7 +679,7 @@ async function openTimingFix(n) {
   const t = current.timings?.[n];
   if (!t) return;
   // The original (unfixed) timing, for "Reset".
-  const raw = r.timingRead ? await api.getTimings(r, current.num) : store.getTimings(r.id, current.num);
+  const { timings: raw } = await rawTimings(r, current.num);
   const original = raw?.[n] ? { start: raw[n].start, end: raw[n].end } : { start: t.start, end: t.end };
   fix = { n, start: t.start, end: t.end, original, wasFixed: !!t.fixed, reciter: r };
   $('#fix-title').textContent = `Adjust timing · ayah ${n}`;
@@ -745,7 +752,7 @@ $('#fix-save').addEventListener('click', () => {
 
 async function applyFixes() {
   const r = api.reciter(settings.reciter);
-  const raw = r.timingRead ? await api.getTimings(r, current.num) : store.getTimings(r.id, current.num);
+  const { timings: raw } = await rawTimings(r, current.num);
   current.timings = store.withFixes(r.id, current.num, raw);
   markFixedAyat();
   updatePlan();
@@ -889,7 +896,7 @@ async function audioFor(surah) {
     const r = api.reciter(id);
     if (!(await api.isAvailable(r, surah))) continue;
     try {
-      const raw = r.timingRead ? await api.getTimings(r, surah) : store.getTimings(r.id, surah);
+      const { timings: raw } = await rawTimings(r, surah);
       const timings = store.withFixes(r.id, surah, raw);
       if (timings && Object.keys(timings).length) return { reciter: r, timings, url: api.audioUrl(r, surah) };
     } catch { /* try next */ }

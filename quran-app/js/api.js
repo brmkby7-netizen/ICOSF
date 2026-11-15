@@ -13,7 +13,7 @@ const ABKAR = {
   server: 'https://cdn.mp3quran.net/audio/idrees-abkar/r1/',
 };
 const SOBHI = {
-  id: 'sobhi', name: 'Islam Sobhi', style: '', timingRead: null, popular: true,
+  id: 'sobhi', name: 'Islam Sobhi', style: '', timingRead: null, popular: true, bundled: true,
   mp3quranId: 253, moshafId: 253,
   server: 'https://cdn.mp3quran.net/audio/islam-sobhi/r1/',
 };
@@ -252,6 +252,22 @@ export async function getJuzs() {
     byNumber.set(j.juz_number, { juz: j.juz_number, ranges, count: j.verses_count });
   }
   return [...byNumber.values()].sort((a, b) => a.juz - b.juz);
+}
+
+// Timings computed in advance and shipped with the app (data/timings/<id>.json):
+// { "<surah>": [[startMs, endMs], ...] }. Used for reciters without published timings.
+export async function getBundledTimings(reciter, surah) {
+  if (!reciter.bundled) return null;
+  try {
+    const all = await getJson(new URL(`../data/timings/${reciter.id}.json`, import.meta.url).href);
+    const list = all[surah];
+    if (!list?.length) return null;
+    const map = {};
+    list.forEach(([start, end], i) => { map[i + 1] = { start, end }; });
+    return map;
+  } catch {
+    return null;
+  }
 }
 
 // { [ayah]: { start, end } } in milliseconds.
