@@ -481,10 +481,10 @@ function updatePlan() {
   $('#start-label').textContent = `Start ayat ${span(r.from, r.to)}`;
   $('#plan').textContent = `${describeSteps(steps)} · ${fmtDuration(stepsDuration(steps, r.gap))}`;
 
-  // "Move on" appears once this range has been practised, until the end of the surah.
+  // "Move on" is always available until the end of the surah (or of the marked timings).
   const plan = store.getPlan(current.num);
   const started = plan && plan.from === r.from && plan.to === r.to;
-  const canMove = started && r.to < max;
+  const canMove = r.to < max;
   $('#move-on-box').hidden = !canMove;
   if (canMove) {
     const next = moveOnSteps(r);
@@ -517,7 +517,7 @@ async function startRange() {
   const r = readRange();
   rememberRange(r);
   updatePlan();
-  await startSession({ steps: rangeSteps(r), gap: r.gap, title: `ayat ${span(r.from, r.to)}` });
+  await startSession({ steps: rangeSteps(r), gap: r.gap, title: `ayat ${span(r.from, r.to)}`, range: true });
 }
 
 async function moveOn() {
@@ -532,7 +532,7 @@ async function moveOn() {
   }
   rememberRange(next);
   updatePlan();
-  await startSession({ steps: moveOnSteps(r), gap: r.gap, title: `ayat ${span(next.from, next.to)}` });
+  await startSession({ steps: moveOnSteps(r), gap: r.gap, title: `ayat ${span(next.from, next.to)}`, range: true });
 }
 
 async function playOne(n) {
@@ -560,6 +560,7 @@ async function startSession(opts) {
       surahName: current.chapter.name_simple,
       reciter: r.name,
       title: `${current.chapter.name_simple} ${opts.title}`.trim(),
+      range: !!opts.range,
     },
   });
 }
@@ -947,6 +948,7 @@ player.onState((s) => {
   if (s.count > 1) label = `${s.index + 1}/${s.count} · ${label}`;
 
   const multi = s.count > 1;
+  const move = moveOnLabel(s.meta);
   bar.innerHTML = `
     <div class="player-inner">
       <div class="player-info">
@@ -960,29 +962,35 @@ player.onState((s) => {
         <button class="icon-btn" data-act="stop" aria-label="Stop">${icons.stop}</button>
       </div>
     </div>
+    ${move ? `<button class="player-move" data-move type="button"><span>${move}</span>${icons.next}</button>` : ''}
     ${multi ? `<div class="player-progress"><i style="width:${Math.round(s.progress * 100)}%"></i></div>` : ''}`;
 });
+
+// "Move on: ayat 2–6" when the range on the open surah page can still move forward.
+function moveOnLabel(meta) {
+  if (!meta?.range || !current || meta.surah !== current.num || !$('#move-on-box') || $('#move-on-box').hidden) return '';
+  return esc($('#move-on-label').textContent);
+}
 
 // After a range session: offer to move on (or repeat) right from the bar.
 function showDoneBar() {
   document.querySelector('.ayah.playing')?.classList.remove('playing');
   lastHighlighted = null;
   const { from, to } = readRange();
-  const canMove = !$('#move-on-box').hidden;
+  const move = moveOnLabel({ range: true, surah: current.num });
   bar.hidden = false;
   document.body.classList.add('has-player');
   bar.innerHTML = `
     <div class="player-inner done">
       <div class="player-info">
         <span class="player-title">Ayat ${span(from, to)} done. Well done!</span>
-        <span class="player-label">${canMove ? `Ready for ayah ${to + 1}?` : 'Practise again or pick a new range.'}</span>
+        <span class="player-label">${move ? `Move on whenever you’re ready.` : 'You’ve reached the end of this surah.'}</span>
       </div>
       <div class="player-ctrls">
-        <button class="btn ghost small-btn" data-done="again">Again</button>
-        ${canMove ? `<button class="btn primary small-btn" data-done="move">Move on ${icons.next}</button>` : ''}
         <button class="icon-btn" data-done="close" aria-label="Close">✕</button>
       </div>
-    </div>`;
+    </div>
+    ${move ? `<button class="player-move" data-move type="button"><span>${move}</span>${icons.next}</button>` : ''}`;
 }
 
 function hideBar() {
@@ -994,9 +1002,8 @@ bar.addEventListener('click', (e) => {
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act) { player[act](); return; }
   const done = e.target.closest('[data-done]')?.dataset.done;
+  if (e.target.closest('[data-move]')) { moveOn(); return; }
   if (done === 'close') hideBar();
-  else if (done === 'again') startRange();
-  else if (done === 'move') moveOn();
 });
 
 // ---------- settings ----------

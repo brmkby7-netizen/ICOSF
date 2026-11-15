@@ -474,6 +474,27 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   pointer-events: none;
 }
 .player-inner, .player-progress { pointer-events: auto; }
+.player-move {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.player-move svg { width: 18px; height: 18px; }
+.player-move:hover { filter: brightness(1.06); }
+.player-inner:has(+ .player-move) { border-radius: 18px 18px 0 0; }
+.player-move:last-child { border-radius: 0 0 18px 18px; }
+
 .small-btn { min-height: 38px; padding: 0 14px; font-size: 0.9375rem; }
 .small-btn svg { width: 16px; height: 16px; }
 .player > * { max-width: 736px; margin-left: auto; margin-right: auto; }
