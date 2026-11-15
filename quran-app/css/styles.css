@@ -621,6 +621,34 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .grade-btn.easy strong { color: var(--tj-qalqalah); }
 #stop-revising { margin-top: 20px; font-size: 0.8125rem; }
 
+/* ---------- timing fixes ---------- */
+
+.timing-fixed .fix-one { color: var(--accent); }
+.timing-fixed .ayah-num::after { content: ' · timing adjusted'; color: var(--accent); font-size: 0.75rem; }
+.fix-row { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+.fix-head { display: flex; justify-content: space-between; align-items: baseline; }
+.nudge { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.nudge button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.nudge button:hover { border-color: var(--muted); }
+.fix-row .small-btn { justify-self: start; }
+.fix-live { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+.fix-live > .small-btn { justify-self: start; }
+#fix-timing form { gap: 10px; padding-top: 14px; }
+#fix-timing #fix-help { margin: 0; }
+.fix-row, .fix-live { padding: 8px 0; }
+.fix-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#fix-reset { justify-self: center; }
+#fix-reset:disabled { visibility: hidden; }
+
 /* ---------- marker ---------- */
 
 .page-title { font-size: 1.5rem; margin: 4px 0 2px; }

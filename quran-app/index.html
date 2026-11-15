@@ -37,6 +37,58 @@
   <div id="player" class="player" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+  <dialog id="fix-timing" class="sheet">
+    <form method="dialog" id="fix-form">
+      <header class="sheet-head">
+        <h2 id="fix-title">Adjust timing</h2>
+        <button class="icon-btn" value="close" aria-label="Close">✕</button>
+      </header>
+      <p class="muted small" id="fix-help">If this ayah starts or stops in the wrong place, move its start or end. Listen to check, then save.</p>
+
+      <div class="fix-row">
+        <div class="fix-head"><strong>Start</strong> <span class="mono" id="fix-start"></span></div>
+        <div class="nudge">
+          <button type="button" data-nudge="start:-1000">−1 s</button>
+          <button type="button" data-nudge="start:-200">−0.2</button>
+          <button type="button" data-nudge="start:200">+0.2</button>
+          <button type="button" data-nudge="start:1000">+1 s</button>
+        </div>
+        <button type="button" class="btn ghost small-btn" data-hear="start">Hear the start</button>
+      </div>
+
+      <div class="fix-row">
+        <div class="fix-head"><strong>End</strong> <span class="mono" id="fix-end"></span></div>
+        <div class="nudge">
+          <button type="button" data-nudge="end:-1000">−1 s</button>
+          <button type="button" data-nudge="end:-200">−0.2</button>
+          <button type="button" data-nudge="end:200">+0.2</button>
+          <button type="button" data-nudge="end:1000">+1 s</button>
+        </div>
+        <button type="button" class="btn ghost small-btn" data-hear="end">Hear the end</button>
+      </div>
+
+      <div class="fix-live">
+        <button type="button" class="btn small-btn" data-hear="around">Play around this ayah</button>
+        <span class="mono muted small" id="fix-clock"></span>
+        <div class="btn-row" id="fix-mark" hidden>
+          <button type="button" class="btn primary small-btn" data-mark="start">Start is here</button>
+          <button type="button" class="btn primary small-btn" data-mark="end">End is here</button>
+        </div>
+      </div>
+
+      <label class="field check">
+        <input type="checkbox" id="fix-neighbours" checked>
+        <span>Also move the neighbouring ayat’s edges to match</span>
+      </label>
+
+      <div class="fix-actions">
+        <button type="button" class="btn ghost" data-hear="ayah">▶ Play ayah</button>
+        <button type="button" class="btn primary" id="fix-save">Save</button>
+      </div>
+      <button type="button" class="link small" id="fix-reset">Reset to original timing</button>
+    </form>
+  </dialog>
+
   <dialog id="settings" class="sheet">
     <form method="dialog">
       <header class="sheet-head">
@@ -111,7 +163,7 @@
         </div>
       </div>
 
-      <p class="muted small credits">Version <span id="app-version">2026.11.16-3</span>.<br>Text, tajweed and translation: Quran.com. Quran font: KFGQPC Uthmanic Script Hafs, © King Fahd Glorious Quran Printing Complex. Recitations and Idris Abkar timings: mp3quran.net.</p>
+      <p class="muted small credits">Version <span id="app-version">2026.11.16-4</span>.<br>Text, tajweed and translation: Quran.com. Quran font: KFGQPC Uthmanic Script Hafs, © King Fahd Glorious Quran Printing Complex. Recitations and Idris Abkar timings: mp3quran.net.</p>
     </form>
   </dialog>
 

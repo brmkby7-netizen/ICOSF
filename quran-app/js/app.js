@@ -258,6 +258,7 @@ function renderSurah() {
     const n = Number(art.dataset.n);
     if (e.target.closest('.mem')) toggleMemorized(n, art);
     else if (e.target.closest('.play-one')) playOne(n);
+    else if (e.target.closest('.fix-one')) openTimingFix(n);
     else if (e.target.closest('.ayah-text') && $('#ayat').classList.contains('test-mode')) {
       e.target.closest('.ayah-text').classList.toggle('revealed');
     }
@@ -313,6 +314,7 @@ const ayahHtml = (v, memorized) => `
     <div class="ayah-tools">
       <span class="ayah-num">${v.n}</span>
       <button class="icon-btn play-one" type="button" aria-label="Play ayah ${v.n}" title="Play this ayah">${icons.play}</button>
+      <button class="icon-btn fix-one" type="button" aria-label="Adjust timing of ayah ${v.n}" title="Adjust timing" hidden>${icons.clock}</button>
       <button class="icon-btn mem" type="button" aria-pressed="${memorized}" aria-label="Memorized ayah ${v.n}" title="Mark as memorized">${icons.check}</button>
     </div>
     <p class="ar ayah-text" lang="ar" dir="rtl">${v.html} <span class="ayah-end">${arNum(v.n)}</span></p>
@@ -355,6 +357,7 @@ async function loadAudioState() {
   const box = $('#audio-status');
   const controls = $('#practice-controls');
   current.timings = null;
+  markFixedAyat();
   current.audioUrl = api.audioUrl(r, num);
   controls.hidden = true;
   box.innerHTML = loading('Loading recitation…');
@@ -383,7 +386,8 @@ async function loadAudioState() {
     return;
   }
 
-  current.timings = timings;
+  current.timings = store.withFixes(r.id, num, timings);
+  markFixedAyat();
   const marked = Math.min(maxContiguous(timings), verses.length);
   const saved = await api.isSavedOffline(current.audioUrl);
   const offlineBtn = `<button class="link" id="offline" type="button">${saved ? 'Saved offline ✓ · Remove' : 'Save audio for offline'}</button>`;
@@ -616,6 +620,137 @@ function highlight(t, session) {
   }
 }
 
+// ---------- per-ayah timing fixes ----------
+
+function markFixedAyat() {
+  for (const art of document.querySelectorAll('.ayah')) {
+    const t = current?.timings?.[art.dataset.n];
+    art.classList.toggle('timing-fixed', !!t?.fixed);
+    art.querySelector('.fix-one')?.toggleAttribute('hidden', !t);
+  }
+}
+
+const fixDlg = $('#fix-timing');
+const fixAudio = new Audio();
+fixAudio.preload = 'auto';
+let fix = null; // { n, start, end, original, prevEnd, nextStart }
+let fixTimer = null;
+
+const fmtClock = (ms) => {
+  const s = Math.max(0, ms) / 1000;
+  return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+};
+
+function stopClip() {
+  clearInterval(fixTimer);
+  fixTimer = null;
+  fixAudio.pause();
+  $('#fix-mark').hidden = true;
+}
+
+async function playClip(fromMs, toMs, { marking = false } = {}) {
+  stopClip();
+  if (player.session) player.pause();
+  fixAudio.currentTime = Math.max(0, fromMs) / 1000;
+  try { await fixAudio.play(); } catch { toast('Couldn’t play the audio. Check your connection.'); return; }
+  $('#fix-mark').hidden = !marking;
+  fixTimer = setInterval(() => {
+    const t = fixAudio.currentTime * 1000;
+    $('#fix-clock').textContent = fmtClock(t);
+    if (t >= toMs || fixAudio.ended) stopClip();
+  }, 50);
+}
+
+function renderFix() {
+  $('#fix-start').textContent = fmtClock(fix.start);
+  $('#fix-end').textContent = fmtClock(fix.end);
+  $('#fix-reset').disabled = !fix.wasFixed && fix.start === fix.original.start && fix.end === fix.original.end;
+}
+
+async function openTimingFix(n) {
+  const r = api.reciter(settings.reciter);
+  const t = current.timings?.[n];
+  if (!t) return;
+  // The original (unfixed) timing, for "Reset".
+  const raw = r.timingRead ? await api.getTimings(r, current.num) : store.getTimings(r.id, current.num);
+  const original = raw?.[n] ? { start: raw[n].start, end: raw[n].end } : { start: t.start, end: t.end };
+  fix = { n, start: t.start, end: t.end, original, wasFixed: !!t.fixed, reciter: r };
+  $('#fix-title').textContent = `Adjust timing · ayah ${n}`;
+  $('#fix-clock').textContent = '';
+  const src = await api.resolveAudio(current.audioUrl);
+  if (fixAudio.dataset.key !== current.audioUrl) { fixAudio.src = src; fixAudio.dataset.key = current.audioUrl; }
+  renderFix();
+  fixDlg.showModal();
+}
+
+fixDlg.addEventListener('close', stopClip);
+fixDlg.addEventListener('click', (e) => {
+  if (e.target === fixDlg) { fixDlg.close(); return; }
+  const nudge = e.target.closest('[data-nudge]')?.dataset.nudge;
+  if (nudge) {
+    const [edge, delta] = nudge.split(':');
+    fix[edge] = Math.max(0, fix[edge] + Number(delta));
+    if (fix.end <= fix.start + 300) {
+      if (edge === 'start') fix.start = fix.end - 300; else fix.end = fix.start + 300;
+    }
+    renderFix();
+    if (edge === 'start') playClip(fix.start, fix.start + 2500);
+    else playClip(fix.end - 2500, fix.end);
+    return;
+  }
+  const hear = e.target.closest('[data-hear]')?.dataset.hear;
+  if (hear === 'start') playClip(fix.start, fix.start + 3000);
+  else if (hear === 'end') playClip(fix.end - 3000, fix.end);
+  else if (hear === 'ayah') playClip(fix.start, fix.end);
+  else if (hear === 'around') playClip(fix.start - 3000, fix.end + 3000, { marking: true });
+  const mark = e.target.closest('[data-mark]')?.dataset.mark;
+  if (mark) {
+    const t = Math.round(fixAudio.currentTime * 1000);
+    if (mark === 'start' && t < fix.end - 300) fix.start = t;
+    else if (mark === 'end' && t > fix.start + 300) fix.end = t;
+    else { toast(mark === 'start' ? 'The start must be before the end.' : 'The end must be after the start.'); return; }
+    renderFix();
+  }
+});
+
+$('#fix-reset').addEventListener('click', () => {
+  fix.start = fix.original.start;
+  fix.end = fix.original.end;
+  const fixes = store.getTimingFixes(fix.reciter.id, current.num);
+  delete fixes[fix.n];
+  if ($('#fix-neighbours').checked) { delete fixes[fix.n - 1]; delete fixes[fix.n + 1]; }
+  store.setTimingFixes(fix.reciter.id, current.num, fixes);
+  fix.wasFixed = false;
+  applyFixes();
+  renderFix();
+  toast(`Ayah ${fix.n} is back to its original timing.`);
+});
+
+$('#fix-save').addEventListener('click', () => {
+  const { n, reciter: r } = fix;
+  const fixes = store.getTimingFixes(r.id, current.num);
+  fixes[n] = [Math.round(fix.start), Math.round(fix.end)];
+  if ($('#fix-neighbours').checked) {
+    const prev = current.timings[n - 1];
+    const next = current.timings[n + 1];
+    // Only when the edge stays inside the neighbour, so it is never squeezed to nothing.
+    if (prev && fix.start > prev.start + 500) fixes[n - 1] = [prev.start, Math.round(fix.start)];
+    if (next && fix.end < next.end - 500) fixes[n + 1] = [Math.round(fix.end), next.end];
+  }
+  store.setTimingFixes(r.id, current.num, fixes);
+  applyFixes();
+  fixDlg.close();
+  toast(`Saved the timing for ayah ${n}.`);
+});
+
+async function applyFixes() {
+  const r = api.reciter(settings.reciter);
+  const raw = r.timingRead ? await api.getTimings(r, current.num) : store.getTimings(r.id, current.num);
+  current.timings = store.withFixes(r.id, current.num, raw);
+  markFixedAyat();
+  updatePlan();
+}
+
 // ---------- marking ----------
 
 async function markView(n) {
@@ -754,7 +889,8 @@ async function audioFor(surah) {
     const r = api.reciter(id);
     if (!(await api.isAvailable(r, surah))) continue;
     try {
-      const timings = r.timingRead ? await api.getTimings(r, surah) : store.getTimings(r.id, surah);
+      const raw = r.timingRead ? await api.getTimings(r, surah) : store.getTimings(r.id, surah);
+      const timings = store.withFixes(r.id, surah, raw);
       if (timings && Object.keys(timings).length) return { reciter: r, timings, url: api.audioUrl(r, surah) };
     } catch { /* try next */ }
   }

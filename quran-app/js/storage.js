@@ -85,6 +85,24 @@ export function getTimings(reciterId, surah) {
 export const setTimings = (reciterId, surah, list) => write(`timings.${reciterId}.${surah}`, list);
 export const clearTimings = (reciterId, surah) => remove(`timings.${reciterId}.${surah}`);
 
+// Per-ayah timing fixes, applied on top of any reciter's timings: { [ayah]: [startMs, endMs] }
+export const getTimingFixes = (reciterId, surah) => read(`timingfix.${reciterId}.${surah}`, {});
+export function setTimingFixes(reciterId, surah, fixes) {
+  if (Object.keys(fixes).length) return write(`timingfix.${reciterId}.${surah}`, fixes);
+  remove(`timingfix.${reciterId}.${surah}`);
+  return true;
+}
+
+// Timings with the user's fixes applied.
+export function withFixes(reciterId, surah, timings) {
+  if (!timings) return timings;
+  const fixes = getTimingFixes(reciterId, surah);
+  if (!Object.keys(fixes).length) return timings;
+  const out = { ...timings };
+  for (const [a, [start, end]] of Object.entries(fixes)) if (out[a]) out[a] = { start, end, fixed: true };
+  return out;
+}
+
 export function exportAll() {
   const data = {};
   for (let i = 0; i < localStorage.length; i++) {
