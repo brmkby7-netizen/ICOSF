@@ -505,6 +505,100 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .player-progress i { display: block; height: 100%; background: var(--accent); transition: width 0.3s; }
 .player-inner:last-child { border-radius: 18px; }
 
+/* ---------- revision ---------- */
+
+.nav a { position: relative; }
+.badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+@media (max-width: 420px) {
+  .brand span { display: none; }
+  .nav a { padding: 6px 10px; }
+}
+
+.revision-card { display: block; color: var(--ink); margin-bottom: 12px; border-color: var(--accent); }
+.revision-card:hover { text-decoration: none; }
+.revision-card .continue-row { align-items: center; }
+
+.explain p { margin: 0 0 8px; }
+.explain ul { margin: 0 0 14px; padding-left: 20px; }
+.explain li + li { margin-top: 6px; }
+
+.passages { list-style: none; margin: 0; padding: 0; }
+.passage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.passage div { display: flex; flex-direction: column; }
+#start-review { margin: 12px 0 4px; }
+.notice.small { margin-top: 12px; font-size: 0.875rem; }
+
+.review-count { margin: 4px 0 0; }
+.review-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 6px; }
+.hint { font-size: 1.6rem; margin: 6px 0; color: var(--accent); }
+
+.review-ayat { margin-top: 10px; }
+.review-ayah {
+  display: block;
+  width: 100%;
+  text-align: right;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding: 12px 4px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.review-ayah:disabled { cursor: default; }
+.review-ayah .ayah-num { float: left; color: var(--muted); font-size: 0.8125rem; }
+.review-ayah .ar { font-size: clamp(1.5rem, 5vw, 1.9rem); line-height: 2.2; }
+.review-ayah[aria-pressed="true"] { background: color-mix(in srgb, var(--tj-madd-4) 14%, transparent); border-radius: 10px; }
+.review-ayah[aria-pressed="true"] .ayah-num::after { content: ' slipped'; color: var(--tj-madd-4); }
+.hidden-text .ar, .test-mode .ayah-text:not(.revealed) {
+  filter: blur(10px);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.test-mode .ayah-text { cursor: pointer; transition: filter 0.2s; }
+
+.grade { margin-top: 16px; }
+.grade-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.grade-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.grade-btn span { font-size: 0.75rem; color: var(--muted); }
+.grade-btn.again strong { color: var(--tj-madd-4); }
+.grade-btn.hard strong { color: var(--tj-madd-246); }
+.grade-btn.good strong { color: var(--accent); }
+.grade-btn.easy strong { color: var(--tj-qalqalah); }
+#stop-revising { margin-top: 20px; font-size: 0.8125rem; }
+
 /* ---------- marker ---------- */
 
 .page-title { font-size: 1.5rem; margin: 4px 0 2px; }

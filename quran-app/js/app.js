@@ -2,6 +2,7 @@ import * as api from './api.js';
 import * as store from './storage.js';
 import { Player } from './player.js';
 import { renderMarker } from './marker.js';
+import * as revision from './revision.js';
 import { $, esc, arNum, fmtDuration, maxContiguous, toast, icons } from './ui.js';
 
 const TOTAL_AYAT = 6236;
@@ -64,11 +65,13 @@ async function route() {
   if (cleanup) { cleanup(); cleanup = null; }
   if (!player.session) hideBar();
   const [page, arg] = location.hash.replace(/^#\/?/, '').split('/');
-  for (const a of document.querySelectorAll('[data-nav]')) {
-    a.classList.toggle('active', a.dataset.nav === (page === 'progress' ? 'progress' : ''));
-  }
+  const tab = page === 'progress' ? 'progress' : page === 'today' || page === 'review' ? 'today' : '';
+  for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('active', a.dataset.nav === tab);
+  updateDueBadge();
   try {
-    if (page === 'surah') await surahView(Number(arg));
+    if (page === 'today') await todayView();
+    else if (page === 'review') await reviewView();
+    else if (page === 'surah') await surahView(Number(arg));
     else if (page === 'mark') await markView(Number(arg));
     else if (page === 'progress') await progressView();
     else await homeView();
@@ -102,6 +105,7 @@ async function homeView() {
         <h1>Memorize ayah by ayah</h1>
         <p class="muted">Pick a surah, choose a range, and Hifz builds it up for you: ayah 1, then 1–2, then 1–3, repeating each step until it sticks.</p>
       </section>`}
+    ${revisionCard()}
     ${done ? `<a href="#/progress" class="summary-link"><span>${done} of ${TOTAL_AYAT} ayat memorized</span>${progressBar(pct(done, TOTAL_AYAT))}</a>` : ''}
     <div class="search">
       <input type="search" id="q" placeholder="Search by name or number" aria-label="Search surahs" autocomplete="off">
@@ -212,6 +216,7 @@ function renderSurah() {
     <div class="mem-bar">
       <span id="mem-count"></span>
       <span class="mem-actions">
+        <button class="link" id="hide-text" type="button" aria-pressed="false">Hide text</button>
         <button class="link" id="mark-all" type="button">Mark all memorized</button>
         <button class="link" id="clear-all" type="button">Clear</button>
       </span>
@@ -246,17 +251,33 @@ function renderSurah() {
     const n = Number(art.dataset.n);
     if (e.target.closest('.mem')) toggleMemorized(n, art);
     else if (e.target.closest('.play-one')) playOne(n);
+    else if (e.target.closest('.ayah-text') && $('#ayat').classList.contains('test-mode')) {
+      e.target.closest('.ayah-text').classList.toggle('revealed');
+    }
+  });
+
+  $('#hide-text').addEventListener('click', (e) => {
+    const on = $('#ayat').classList.toggle('test-mode');
+    e.target.setAttribute('aria-pressed', String(on));
+    e.target.textContent = on ? 'Show text' : 'Hide text';
+    for (const el of document.querySelectorAll('.ayah-text.revealed')) el.classList.remove('revealed');
+    if (on) toast('Recite from memory. Tap an ayah to check it.');
   });
 
   $('#mark-all').addEventListener('click', () => {
-    store.setMemorized(num, new Set(verses.map((v) => v.n)));
+    const all = verses.map((v) => v.n);
+    store.setMemorized(num, new Set(all));
+    const added = revision.addKnown(num, all, { spread: true });
     refreshMemorized();
-    toast(`${chapter.name_simple} marked as memorized. Masha’Allah!`);
+    updateDueBadge();
+    toast(`${chapter.name_simple} marked as memorized${added ? ' and added to your revision' : ''}. Masha’Allah!`);
   });
   $('#clear-all').addEventListener('click', () => {
     if (!store.countMemorized(num)) return;
-    if (!confirm(`Clear memorized marks for ${chapter.name_simple}?`)) return;
+    if (!confirm(`Clear memorized marks for ${chapter.name_simple}? These ayat will also leave your revision.`)) return;
+    revision.remove(num, [...store.getMemorizedSet(num)]);
     store.setMemorized(num, new Set());
+    updateDueBadge();
     refreshMemorized();
   });
 
@@ -302,6 +323,9 @@ function toggleMemorized(n, art) {
   set.has(n) ? set.delete(n) : set.add(n);
   store.setMemorized(current.num, set);
   const on = set.has(n);
+  if (on) revision.addKnown(current.num, [n]);
+  else revision.remove(current.num, [n]);
+  updateDueBadge();
   art.classList.toggle('memorized', on);
   art.querySelector('.mem').setAttribute('aria-pressed', String(on));
   updateMemCount();
@@ -470,9 +494,17 @@ function updatePlan() {
   const atEnd = started && r.to >= current.verses.length;
   const end = $('#end-note');
   end.hidden = !(started && r.to >= max);
-  end.textContent = atEnd
-    ? 'You’ve reached the end of the surah.'
-    : `Mark the timings for ayah ${max + 1} onwards to move on further.`;
+  const pending = [];
+  for (let a = r.from; a <= r.to; a++) if (!revision.has(current.num, a)) pending.push(a);
+  end.innerHTML = atEnd
+    ? `You’ve reached the end of the surah.${pending.length ? ` <button class="link" id="finish-surah" type="button">Add ayat ${span(pending[0], pending.at(-1))} to revision</button>` : ''}`
+    : esc(`Mark the timings for ayah ${max + 1} onwards to move on further.`);
+  $('#finish-surah')?.addEventListener('click', () => {
+    revision.addNew(current.num, pending);
+    updateDueBadge();
+    toast(`Ayat ${span(pending[0], pending.at(-1))} added to your revision.`);
+    updatePlan();
+  });
 }
 
 function rememberRange(r) {
@@ -494,6 +526,10 @@ async function moveOn() {
   if (!current.timings[next.to]) return;
   $('#from').value = String(next.from);
   $('#to').value = String(next.to);
+  if (revision.addNew(current.num, [r.from])) {
+    updateDueBadge();
+    toast(`Ayah ${r.from} moved to your revision. It comes back later today.`);
+  }
   rememberRange(next);
   updatePlan();
   await startSession({ steps: moveOnSteps(r), gap: r.gap, title: `ayat ${span(next.from, next.to)}` });
@@ -594,6 +630,253 @@ async function markView(n) {
   });
 }
 
+// ---------- revision ----------
+
+function updateDueBadge() {
+  const badge = $('#due-badge');
+  if (!badge) return;
+  const n = revision.dueCount();
+  badge.textContent = n > 99 ? '99+' : String(n);
+  badge.hidden = n === 0;
+}
+
+const surahName = (n) => chapters[n - 1]?.name_simple || `Surah ${n}`;
+
+function fmtWhen(t) {
+  const d = new Date(t);
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return `today at ${time}`;
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+  if (d.toDateString() === tomorrow.toDateString()) return 'tomorrow morning';
+  return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+}
+
+function revisionCard() {
+  const due = revision.dueCount();
+  if (!due) return '';
+  return `<a class="card revision-card" href="#/today">
+    <span class="eyebrow">Today’s revision</span>
+    <span class="continue-row"><strong>${due} ayat due</strong><span class="btn primary small-btn">Revise</span></span>
+  </a>`;
+}
+
+function passageLabel(p) {
+  if (p.stale && p.items.some((x) => x.r)) return `Not revised for ${p.staleDays} days`;
+  if (p.weak) return 'Weak spot';
+  return p.old ? 'Old revision' : 'Recent';
+}
+
+async function todayView() {
+  view.innerHTML = loading();
+  await ensureChapters();
+  const plan = revision.todayPlan({ cap: settings.reviewCap });
+
+  if (!plan.total) {
+    view.innerHTML = `
+      <h1 class="page-title">Today’s revision</h1>
+      <div class="card explain">
+        <p><strong>Nothing to revise yet.</strong></p>
+        <p class="muted">Ayat join your revision automatically:</p>
+        <ul class="muted">
+          <li>when you press <strong>Move on</strong>, the ayah that leaves the range comes back later today, tomorrow morning, then after 2, 3 and 7 days, then less and less often;</li>
+          <li>when you tick ✓ an ayah you already know, it joins your regular rotation.</li>
+        </ul>
+        <a class="btn" href="#/">Choose a surah</a>
+      </div>`;
+    return;
+  }
+
+  const old = plan.today.filter((p) => p.old);
+  const recent = plan.today.filter((p) => !p.old);
+  const row = (p, i) => `
+    <li class="passage">
+      <div>
+        <strong>${esc(surahName(p.surah))} ${span(p.from, p.to)}</strong>
+        <span class="muted small">${p.items.length} ${p.items.length === 1 ? 'ayah' : 'ayat'} · ${passageLabel(p)}</span>
+      </div>
+      <button class="btn small-btn" data-start="${i}">Revise</button>
+    </li>`;
+  const section = (title, list, offset) => list.length
+    ? `<h2 class="section-title">${title}</h2><ol class="passages">${list.map((p, i) => row(p, i + offset)).join('')}</ol>` : '';
+
+  view.innerHTML = `
+    <h1 class="page-title">Today’s revision</h1>
+    ${plan.today.length ? `
+      <p class="muted">${plan.shownAyat} ayat in ${plan.today.length} ${plan.today.length === 1 ? 'passage' : 'passages'}${plan.doneToday ? ` · ${plan.doneToday} done today` : ''}</p>
+      <button class="btn primary wide" id="start-review" type="button">${icons.play}<span>Start revision</span></button>
+      ${plan.behind ? `<div class="notice small"><p>You’re behind on revision (${plan.dueAyat} ayat due, daily limit ${settings.reviewCap}). The rest will wait for the next days. Consider revising before learning new ayat until you catch up.</p></div>` : ''}
+      ${section('Old revision', old, 0)}
+      ${section('Recent', recent, old.length)}` : `
+      <div class="card explain">
+        <p><strong>${plan.doneToday ? `Done for today. ${plan.doneToday} ayat revised. Masha’Allah!` : 'All caught up.'}</strong></p>
+        ${plan.waiting ? `<p class="muted">You’ve reached today’s limit of ${settings.reviewCap} ayat. ${plan.waiting} more will come tomorrow. You can raise the limit in Settings.</p>` : ''}
+        ${plan.nextDue ? `<p class="muted">Next revision: ${fmtWhen(plan.nextDue)}.</p>` : ''}
+      </div>`}
+    ${plan.laterToday && plan.today.length ? `<p class="muted small">${plan.laterToday} more ${plan.laterToday === 1 ? 'ayah comes' : 'ayat come'} back later today.</p>` : ''}`;
+
+  const ordered = [...old, ...recent];
+  $('#start-review')?.addEventListener('click', () => startReview(ordered));
+  for (const list of view.querySelectorAll('.passages')) {
+    list.addEventListener('click', (e) => {
+      const i = e.target.closest('[data-start]')?.dataset.start;
+      if (i != null) startReview(ordered.slice(Number(i)));
+    });
+  }
+}
+
+let reviewQueue = null; // { passages, index, revised }
+
+function startReview(passages) {
+  reviewQueue = { passages, index: 0, revised: 0, again: 0 };
+  if (location.hash === '#/review') route();
+  else location.hash = '#/review';
+}
+
+async function audioFor(surah) {
+  // Prefer the chosen reciter; fall back to Idris Abkar when there are no timings.
+  for (const id of [settings.reciter, 'abkar']) {
+    const r = api.RECITERS[id];
+    if (!r || !(await api.isAvailable(r, surah))) continue;
+    try {
+      const timings = r.timingRead ? await api.getTimings(r, surah) : store.getTimings(r.id, surah);
+      if (timings && Object.keys(timings).length) return { reciter: r, timings, url: api.audioUrl(r, surah) };
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+async function reviewView() {
+  if (!reviewQueue || reviewQueue.index >= reviewQueue.passages.length) {
+    if (!reviewQueue) { location.replace('#/today'); return; }
+    return reviewSummary();
+  }
+  view.innerHTML = loading();
+  await ensureChapters();
+  const q = reviewQueue;
+  const p = q.passages[q.index];
+  const verses = (await api.getVerses(p.surah)).filter((v) => v.n >= p.from && v.n <= p.to);
+  const maxGap = settings.maxGap;
+  const preview = (g) => revision.fmtGap(revision.previewInterval(p.items, g, maxGap));
+  const firstWord = verses[0]?.text.split(' ')[0] || '';
+
+  view.innerHTML = `
+    <a href="#/today" class="back">${icons.back}<span>Today</span></a>
+    <p class="muted small review-count">Passage ${q.index + 1} of ${q.passages.length} · ${passageLabel(p)}</p>
+    <h1 class="page-title">${esc(surahName(p.surah))} · ${p.from === p.to ? `ayah ${p.from}` : `ayat ${p.from}–${p.to}`}</h1>
+    <p class="muted" id="review-help">Recite from memory, then reveal to check yourself.</p>
+
+    <div class="review-tools">
+      <button class="btn ghost small-btn" id="hint" type="button">First word</button>
+      <button class="btn ghost small-btn" id="listen" type="button" disabled>${icons.play}<span>Listen</span></button>
+      <button class="btn primary small-btn" id="reveal" type="button">Reveal</button>
+    </div>
+    <p class="hint ar" lang="ar" dir="rtl" id="hint-text" hidden>${esc(firstWord)} …</p>
+
+    <div class="review-ayat hidden-text" id="review-ayat">
+      ${verses.map((v) => `
+        <button class="review-ayah" type="button" data-n="${v.n}" aria-pressed="false" disabled>
+          <span class="ayah-num">${v.n}</span>
+          <span class="ar" lang="ar" dir="rtl">${v.html} <span class="ayah-end">${arNum(v.n)}</span></span>
+        </button>`).join('')}
+    </div>
+
+    <div class="grade" id="grade" hidden>
+      <p class="muted small">Tap any ayah you slipped on, then rate how it went:</p>
+      <div class="grade-row">
+        <button class="grade-btn again" data-g="again" type="button"><strong>Forgot</strong><span>${preview('again')}</span></button>
+        <button class="grade-btn hard" data-g="hard" type="button"><strong>Hard</strong><span>${preview('hard')}</span></button>
+        <button class="grade-btn good" data-g="good" type="button"><strong>Good</strong><span>${preview('good')}</span></button>
+        <button class="grade-btn easy" data-g="easy" type="button"><strong>Easy</strong><span>${preview('easy')}</span></button>
+      </div>
+    </div>
+    <p class="small"><button class="link muted" id="stop-revising" type="button">Stop revising these ayat</button></p>`;
+
+  const box = $('#review-ayat');
+  $('#hint').addEventListener('click', () => { $('#hint-text').hidden = false; });
+  $('#reveal').addEventListener('click', () => {
+    box.classList.remove('hidden-text');
+    for (const b of box.querySelectorAll('.review-ayah')) b.disabled = false;
+    $('#reveal').hidden = true;
+    $('#hint').hidden = true;
+    $('#hint-text').hidden = true;
+    $('#review-help').textContent = 'Check what you recited.';
+    $('#grade').hidden = false;
+  });
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('.review-ayah');
+    if (!b || b.disabled) return;
+    const on = b.getAttribute('aria-pressed') !== 'true';
+    b.setAttribute('aria-pressed', String(on));
+  });
+  $('#grade').addEventListener('click', (e) => {
+    const g = e.target.closest('[data-g]')?.dataset.g;
+    if (!g) return;
+    const slipped = new Set([...box.querySelectorAll('.review-ayah[aria-pressed="true"]')].map((b) => Number(b.dataset.n)));
+    const grades = {};
+    for (let a = p.from; a <= p.to; a++) grades[a] = slipped.has(a) ? 'again' : g;
+    revision.grade(p.surah, grades, { maxGap });
+    if (player.session?.meta?.review) player.stop();
+    q.revised += p.to - p.from + 1;
+    q.again += Object.values(grades).filter((x) => x === 'again').length;
+    q.index++;
+    updateDueBadge();
+    route();
+    window.scrollTo(0, 0);
+  });
+  $('#stop-revising').addEventListener('click', () => {
+    if (!confirm(`Stop revising ${surahName(p.surah)} ${span(p.from, p.to)}? You can add them back by ticking ✓ on the surah page.`)) return;
+    revision.remove(p.surah, Array.from({ length: p.to - p.from + 1 }, (_, i) => p.from + i));
+    q.index++;
+    updateDueBadge();
+    route();
+  });
+
+  const audio = await audioFor(p.surah);
+  const listen = $('#listen');
+  if (!audio || !audio.timings[p.from] || !audio.timings[p.to] || !listen) return;
+  listen.disabled = false;
+  listen.addEventListener('click', async () => {
+    const src = await api.resolveAudio(audio.url);
+    player.start({
+      key: audio.url,
+      src,
+      timings: audio.timings,
+      steps: [{ kind: p.from === p.to ? 'ayah' : 'link', from: p.from, to: p.to, repeats: 1 }],
+      gap: 0,
+      meta: { surah: p.surah, surahName: surahName(p.surah), reciter: audio.reciter.name, title: `${surahName(p.surah)} ${span(p.from, p.to)}`, review: true },
+    });
+  });
+}
+
+function reviewSummary() {
+  const q = reviewQueue;
+  reviewQueue = null;
+  const plan = revision.todayPlan({ cap: settings.reviewCap });
+  view.innerHTML = `
+    <div class="empty">
+      <h1 class="page-title">Revision done. Masha’Allah!</h1>
+      <p class="muted">${q.revised} ${q.revised === 1 ? 'ayah' : 'ayat'} revised${q.again ? `, ${q.again} to look at again tomorrow` : ''}.</p>
+      ${plan.today.length ? `<p class="muted">${plan.shownAyat} more ayat are due today.</p><a class="btn primary" href="#/today">Continue</a>` : `
+        ${plan.nextDue ? `<p class="muted">Next revision: ${fmtWhen(plan.nextDue)}.</p>` : ''}
+        <a class="btn" href="#/">Back to surahs</a>`}
+    </div>`;
+}
+
+function revisionStats() {
+  const st = revision.stats();
+  if (!st.total) return '';
+  const weak = revision.toPassages(st.weak).slice(0, 8);
+  return `
+    <h2 class="section-title">Revision</h2>
+    <section class="stats">
+      <div class="stat"><span class="stat-n">${st.total}</span><span class="muted small">ayat in revision</span></div>
+      <div class="stat"><span class="stat-n">${st.due}</span><span class="muted small">due now</span></div>
+      <div class="stat"><span class="stat-n">${st.weak.length}</span><span class="muted small">weak ayat</span></div>
+    </section>
+    ${weak.length ? `<p class="muted small">Weak spots (forgotten twice or more): ${weak.map((p) => `<a href="#/surah/${p.surah}">${esc(surahName(p.surah))} ${span(p.from, p.to)}</a>`).join(' · ')}</p>` : ''}`;
+}
+
 // ---------- progress ----------
 
 async function progressView() {
@@ -626,6 +909,8 @@ async function progressView() {
       <div class="stat"><span class="stat-n">${pctLabel(done, TOTAL_AYAT)}</span><span class="muted small">of the Quran</span></div>
       <div class="stat"><span class="stat-n">${complete}</span><span class="muted small">surahs complete</span></div>
     </section>
+
+    ${revisionStats()}
 
     <h2 class="section-title">By juz</h2>
     <div class="juz-grid">${juzHtml}</div>
@@ -725,6 +1010,8 @@ $('#open-settings').addEventListener('click', () => {
   form.tajweed.checked = settings.tajweed;
   form.autoscroll.checked = settings.autoscroll;
   form.speed.value = String(settings.speed);
+  form.reviewCap.value = String(settings.reviewCap);
+  form.maxGap.value = String(settings.maxGap);
   dlg.showModal();
 });
 
@@ -735,6 +1022,8 @@ form.addEventListener('change', () => {
     tajweed: form.tajweed.checked,
     autoscroll: form.autoscroll.checked,
     speed: Number(form.speed.value),
+    reviewCap: Number(form.reviewCap.value),
+    maxGap: Number(form.maxGap.value),
   });
   applyTheme();
   player.setRate(settings.speed);

@@ -10,6 +10,8 @@ A small installable web app (PWA) for memorizing the Quran ayah by ayah. You can
   3. Ayah 3 ×3, then 1–3 together ×2
   4. …and so on, ending with 1–5 together ×2
 - **Move on**: when you're ready, the range slides forward by one ayah without starting over. You read the new ayah (6) ×3, then the new range (2–6) together ×2. The range is saved per surah, so you can pick up another day. There's an optional pause after each repeat so you can recite.
+- **Today's revision** (spaced repetition): when Move on drops an ayah from the range, it joins your revision automatically. It comes back later that day, the next morning, then after 2, 3 and 7 days, then roughly doubling, but never longer than a maximum gap (30 days by default). Ayat you tick ✓ as already memorized join the long-term rotation; ticking a whole surah spreads it over two weeks. The Today tab lists due passages, old revision first, up to a daily limit, and says when you're behind. Each review: recite from memory (with an optional first-word hint or Listen), reveal, tap any ayah you slipped on (it comes back tomorrow), then grade Forgot / Hard / Good / Easy. Progress shows ayat in revision and weak spots.
+- **Hide text** on the surah page: blur the Arabic and tap an ayah to check yourself.
 - **Reciters**
   - **Idris Abkar**: all 114 surahs. Ayah timings come from mp3quran.net, so looping works straight away.
   - **Islam Sobhi**: 109 surahs. mp3quran.net doesn't publish ayah timings for this recording, so you mark them once per surah: tap along while the surah plays, once when ayah 1 begins and once at the end of each ayah. The timings are saved on the device. You can save part-way and continue later, or re-mark at any time.
@@ -48,6 +50,7 @@ css/styles.css        design tokens (light/dark) and layout
 js/app.js             router and views: surah list, surah/practice, marking, progress
 js/player.js          segment player and practice sessions (cumulative / single ayah / whole surah)
 js/marker.js          tap-to-mark ayah timings
+js/revision.js        revision scheduler (spaced repetition) and today's plan
 js/api.js             Quran.com and mp3quran.net clients, offline audio
 js/storage.js         localStorage: settings, memorized ayat, timings, backup
 js/ui.js              helpers and icons

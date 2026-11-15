@@ -33,6 +33,8 @@ const DEFAULTS = {
   linkRepeats: 2,
   gap: 0,
   speed: 1,
+  reviewCap: 50,
+  maxGap: 30,
 };
 
 export const getSettings = () => ({ ...DEFAULTS, ...read('settings', {}) });
@@ -64,6 +66,13 @@ export function setPlan(surah, plan) {
   plans[surah] = plan;
   return write('plans', plans);
 }
+
+// Revision schedule: { "surah:ayah": { d: dueMs, s: stage, i: intervalDays, l: lapses, r: lastReviewMs, t: addedMs } }
+export const getReviews = () => read('reviews', {});
+export const saveReviews = (v) => write('reviews', v);
+// How many ayat were revised today: { day: 'YYYY-MM-DD', count }
+export const getReviewLog = () => read('reviewlog', { day: '', count: 0 });
+export const saveReviewLog = (v) => write('reviewlog', v);
 
 // Ayah timings a user marked by hand, stored as [[startMs, endMs], ...] (index = ayah - 1).
 export function getTimings(reciterId, surah) {
