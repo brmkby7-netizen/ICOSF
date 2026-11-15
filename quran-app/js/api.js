@@ -1,27 +1,81 @@
-// Data sources: Quran.com (text + translation) and mp3quran.net (audio + Idris Abkar ayah timings).
+// Data sources: Quran.com (text, tajweed, translation) and mp3quran.net (audio + ayah timings).
 const QURAN = 'https://api.quran.com/api/v4';
 const MP3 = 'https://mp3quran.net/api/v3';
 const TRANSLATION_ID = 20; // Saheeh International
 const AUDIO_CACHE = 'qm-audio';
 
-export const RECITERS = {
-  abkar: {
-    id: 'abkar',
-    name: 'Idris Abkar',
-    mp3quranId: 12,
-    moshafId: 12,
-    server: 'https://cdn.mp3quran.net/audio/idrees-abkar/r1/',
-    timingRead: 12, // mp3quran publishes ayah timings for this recording
-  },
-  sobhi: {
-    id: 'sobhi',
-    name: 'Islam Sobhi',
-    mp3quranId: 253,
-    moshafId: 253,
-    server: 'https://cdn.mp3quran.net/audio/islam-sobhi/r1/',
-    timingRead: null, // no published timings: the user marks them once per surah
-  },
+// Reciters. Every mp3quran.net recording with published ayah timings (Hafs) can loop ayat
+// straight away; the list is loaded live. Islam Sobhi has no published timings, so users
+// mark them once per surah. Ids: 'r<read id>' ('abkar' kept for Idris Abkar's read 12, so
+// earlier saved settings still work) and 'sobhi'.
+const ABKAR = {
+  id: 'abkar', name: 'Idris Abkar', style: '', timingRead: 12, popular: true,
+  server: 'https://cdn.mp3quran.net/audio/idrees-abkar/r1/',
 };
+const SOBHI = {
+  id: 'sobhi', name: 'Islam Sobhi', style: '', timingRead: null, popular: true,
+  mp3quranId: 253, moshafId: 253,
+  server: 'https://cdn.mp3quran.net/audio/islam-sobhi/r1/',
+};
+
+// Well-known reciters, shown first (mp3quran read ids).
+const POPULAR = new Set([123, 54, 31, 118, 112, 53, 30, 5, 4, 92, 133, 81, 74, 109, 60, 62, 43, 12,
+  59, 20, 89, 86, 217, 106, 51, 119]);
+
+const reciterMap = new Map([[ABKAR.id, ABKAR], [SOBHI.id, SOBHI]]);
+let loadedReciters = null;
+
+const titleFromSlug = (url) => (url.match(/audio\/([^/]+)\//)?.[1] || 'Reciter')
+  .split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
+function styleOf(moshafName, rewaya) {
+  if (/mojawwad|mujawwad/i.test(moshafName || '') || /المجود/.test(rewaya || '')) return 'Mujawwad';
+  if (/mo'?lim|mu'?allim/i.test(moshafName || '') || /المعلم/.test(rewaya || '')) return 'Teaching';
+  return '';
+}
+
+export async function getReciters() {
+  if (loadedReciters) return loadedReciters;
+  try {
+    const [reads, eng] = await Promise.all([
+      getJson(`${MP3}/ayat_timing/reads`),
+      getJson(`${MP3}/reciters?language=eng`).catch(() => null),
+    ]);
+    const byServer = new Map();
+    for (const r of eng?.reciters || []) {
+      for (const m of r.moshaf || []) byServer.set(m.server, { name: r.name, moshaf: m.name });
+    }
+    const list = [];
+    for (const x of reads) {
+      const info = byServer.get(x.folder_url);
+      const hafs = info ? /hafs/i.test(info.moshaf) : /حفص|المجود/.test(x.rewaya || '');
+      if (!hafs) continue; // the app shows the Hafs text, so other riwayat would not match
+      const id = x.id === 12 ? 'abkar' : `r${x.id}`;
+      list.push({
+        id,
+        name: (info?.name || titleFromSlug(x.folder_url)).trim(),
+        style: styleOf(info?.moshaf, x.rewaya),
+        timingRead: x.id,
+        server: x.folder_url,
+        popular: POPULAR.has(x.id),
+        surahCount: x.soar_count,
+      });
+    }
+    list.push(SOBHI);
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    for (const r of list) reciterMap.set(r.id, r);
+    loadedReciters = list;
+  } catch {
+    loadedReciters = [ABKAR, SOBHI]; // offline before the list was ever loaded
+  }
+  return loadedReciters;
+}
+
+// Synchronous lookup (after getReciters() has run); falls back to Idris Abkar.
+export const reciter = (id) => reciterMap.get(id) || ABKAR;
+export const reciterLabel = (r) => (r.style ? `${r.name} (${r.style})` : r.name);
+export const SOBHI_RECITER = SOBHI;
+export const reciterList = () => loadedReciters || [ABKAR, SOBHI];
 
 const memo = new Map();
 function getJson(url) {
@@ -225,6 +279,8 @@ async function surahList(reciter) {
 }
 
 export async function isAvailable(reciter, surah) {
+  // Reciters with timings: availability shows up as empty timings for that surah.
+  if (reciter.timingRead) return true;
   try {
     return (await surahList(reciter)).has(surah);
   } catch {

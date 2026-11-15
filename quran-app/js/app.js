@@ -148,12 +148,24 @@ async function surahView(n) {
   view.innerHTML = loading();
   await ensureChapters();
   const chapter = chapters[n - 1];
-  const verses = await api.getVerses(n);
+  const [verses] = await Promise.all([api.getVerses(n), api.getReciters()]);
+  if (!settings.reciter || api.reciter(settings.reciter).id !== settings.reciter) saveSettings({ reciter: 'abkar' });
   if (player.session && player.session.meta.surah !== n) player.stop();
   current = { num: n, chapter, verses, timings: null, audioUrl: null };
   renderSurah();
   const offTime = player.onTime(highlight);
   cleanup = () => { offTime(); lastHighlighted = null; };
+}
+
+function reciterOptions() {
+  const list = api.reciterList();
+  const opt = (r) => `<option value="${r.id}" ${r.id === settings.reciter ? 'selected' : ''}>${esc(api.reciterLabel(r))}</option>`;
+  const popular = list.filter((r) => r.popular && r.timingRead);
+  const others = list.filter((r) => !r.popular && r.timingRead);
+  const manual = list.filter((r) => !r.timingRead);
+  return `<optgroup label="Popular">${popular.map(opt).join('')}</optgroup>
+    ${others.length ? `<optgroup label="All reciters (A–Z)">${others.map(opt).join('')}</optgroup>` : ''}
+    <optgroup label="Mark ayah timings yourself">${manual.map(opt).join('')}</optgroup>`;
 }
 
 function selectOptions(max, selected) {
@@ -180,9 +192,7 @@ function renderSurah() {
     <section class="card practice" aria-label="Practice">
       <div class="field-row">
         <span class="label">Reciter</span>
-        <div class="seg" role="radiogroup" aria-label="Reciter" id="reciters">
-          ${Object.values(api.RECITERS).map((r) => `<button type="button" role="radio" data-r="${r.id}" aria-checked="${settings.reciter === r.id}">${esc(r.name)}</button>`).join('')}
-        </div>
+        <select id="reciter" class="reciter-select" aria-label="Reciter">${reciterOptions()}</select>
       </div>
       <div id="audio-status"></div>
       <div id="practice-controls" hidden>
@@ -232,12 +242,9 @@ function renderSurah() {
 
   updateMemCount();
 
-  $('#reciters').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-r]');
-    if (!b || b.dataset.r === settings.reciter) return;
+  $('#reciter').addEventListener('change', (e) => {
     if (player.session) player.stop();
-    saveSettings({ reciter: b.dataset.r });
-    for (const x of $('#reciters').children) x.setAttribute('aria-checked', String(x.dataset.r === settings.reciter));
+    saveSettings({ reciter: e.target.value });
     loadAudioState();
   });
 
@@ -343,7 +350,7 @@ function refreshMemorized() {
 }
 
 async function loadAudioState() {
-  const r = api.RECITERS[settings.reciter] || api.RECITERS.abkar;
+  const r = api.reciter(settings.reciter);
   const { num, verses } = current;
   const box = $('#audio-status');
   const controls = $('#practice-controls');
@@ -371,6 +378,10 @@ async function loadAudioState() {
     timings = store.getTimings(r.id, num);
   }
   if (current?.num !== num || settings.reciter !== r.id) return;
+  if (r.timingRead && !Object.keys(timings || {}).length) {
+    box.innerHTML = notice(`${esc(api.reciterLabel(r))}’s recording of this surah isn’t available. Choose another reciter.`);
+    return;
+  }
 
   current.timings = timings;
   const marked = Math.min(maxContiguous(timings), verses.length);
@@ -548,7 +559,7 @@ async function playFull() {
 }
 
 async function startSession(opts) {
-  const r = api.RECITERS[settings.reciter];
+  const r = api.reciter(settings.reciter);
   const src = await api.resolveAudio(current.audioUrl);
   player.start({
     ...opts,
@@ -558,7 +569,7 @@ async function startSession(opts) {
     meta: {
       surah: current.num,
       surahName: current.chapter.name_simple,
-      reciter: r.name,
+      reciter: api.reciterLabel(r),
       title: `${current.chapter.name_simple} ${opts.title}`.trim(),
       range: !!opts.range,
     },
@@ -614,7 +625,9 @@ async function markView(n) {
   const chapter = chapters[n - 1];
   const verses = await api.getVerses(n);
   if (player.session) player.stop();
-  const r = api.RECITERS[settings.reciter]?.timingRead ? api.RECITERS.sobhi : api.RECITERS[settings.reciter];
+  await api.getReciters();
+  const chosen = api.reciter(settings.reciter);
+  const r = chosen.timingRead ? api.SOBHI_RECITER : chosen;
   const src = await api.resolveAudio(api.audioUrl(r, n));
   cleanup = renderMarker(view, {
     chapter,
@@ -737,8 +750,9 @@ function startReview(passages) {
 async function audioFor(surah) {
   // Prefer the chosen reciter; fall back to Idris Abkar when there are no timings.
   for (const id of [settings.reciter, 'abkar']) {
-    const r = api.RECITERS[id];
-    if (!r || !(await api.isAvailable(r, surah))) continue;
+    await api.getReciters();
+    const r = api.reciter(id);
+    if (!(await api.isAvailable(r, surah))) continue;
     try {
       const timings = r.timingRead ? await api.getTimings(r, surah) : store.getTimings(r.id, surah);
       if (timings && Object.keys(timings).length) return { reciter: r, timings, url: api.audioUrl(r, surah) };
