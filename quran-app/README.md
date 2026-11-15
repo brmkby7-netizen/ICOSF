@@ -34,7 +34,7 @@ Opening `index.html` directly from disk won't work, because ES modules and the s
 
 | What | Source |
 | --- | --- |
-| Surah list, Uthmani text with tajweed markup, translation, juz boundaries | `api.quran.com/api/v4` |
+| Surah list, KFGQPC-encoded text (`qpc_hafs`), tajweed markup, translation, juz boundaries | `api.quran.com/api/v4` |
 | Recitation audio (whole-surah MP3s) | `cdn.mp3quran.net` |
 | Reciter surah lists, Idris Abkar ayah timings | `mp3quran.net/api/v3` |
 

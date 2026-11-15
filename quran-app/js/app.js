@@ -217,7 +217,7 @@ function renderSurah() {
       </span>
     </div>
 
-    ${chapter.bismillah_pre ? '<p class="ar basmala" lang="ar" dir="rtl">بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</p>' : ''}
+    ${chapter.bismillah_pre ? '<p class="ar basmala" lang="ar" dir="rtl">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</p>' : ''}
 
     ${tajweedLegend()}
 
