@@ -10,9 +10,16 @@
   --highlight: #fbf3dc;
   --danger: #a23b2a;
   --shadow: 0 1px 2px rgb(30 25 10 / 0.05), 0 4px 16px rgb(30 25 10 / 0.04);
+  --tj-madd-6: #a3121b;
+  --tj-madd-4: #e0313c;
+  --tj-madd-246: #e8711c;
+  --tj-madd-2: #b98500;
+  --tj-ghunnah: #13915a;
+  --tj-qalqalah: #1f78c8;
+  --tj-silent: #a3a09a;
   --radius: 14px;
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-ar: 'Amiri Quran', 'Amiri', 'Scheherazade New', 'Traditional Arabic', serif;
+  --font-ar: 'KFGQPC Hafs', 'Amiri Quran', 'Scheherazade New', 'Traditional Arabic', serif;
   color-scheme: light;
 }
 
@@ -29,6 +36,13 @@
     --highlight: #2b2819;
     --danger: #e58a77;
     --shadow: none;
+    --tj-madd-6: #ff6b6b;
+    --tj-madd-4: #ff8f8f;
+    --tj-madd-246: #ffaa5c;
+    --tj-madd-2: #e6c35a;
+    --tj-ghunnah: #5fd39a;
+    --tj-qalqalah: #6cb6ff;
+    --tj-silent: #75736d;
     color-scheme: dark;
   }
 }
@@ -45,7 +59,22 @@
   --highlight: #2b2819;
   --danger: #e58a77;
   --shadow: none;
+  --tj-madd-6: #ff6b6b;
+  --tj-madd-4: #ff8f8f;
+  --tj-madd-246: #ffaa5c;
+  --tj-madd-2: #e6c35a;
+  --tj-ghunnah: #5fd39a;
+  --tj-qalqalah: #6cb6ff;
+  --tj-silent: #75736d;
   color-scheme: dark;
+}
+
+/* KFGQPC Uthmanic Script Hafs: the King Fahd Complex font used in the Madinah Mushaf.
+   Distributed unmodified under its own licence (see the font's metadata). */
+@font-face {
+  font-family: 'KFGQPC Hafs';
+  src: url('../fonts/kfgqpc-uthmanic-hafs.otf') format('opentype');
+  font-display: swap;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -410,7 +439,25 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   margin: 0;
   text-align: right;
 }
-.end { color: var(--accent); font-size: 0.85em; white-space: nowrap; }
+.ayah-end { color: var(--accent); white-space: nowrap; }
+
+/* ---------- tajweed (colour scheme of the Dar al-Maarifah tajweed mushaf) ---------- */
+
+.tj-madda_necessary, .sw-madd-6 { --tj: var(--tj-madd-6); }
+.tj-madda_obligatory, .sw-madd-4 { --tj: var(--tj-madd-4); }
+.tj-madda_permissible, .sw-madd-246 { --tj: var(--tj-madd-246); }
+.tj-madda_normal, .sw-madd-2 { --tj: var(--tj-madd-2); }
+.tj-ghunnah, .tj-ikhafa, .tj-ikhafa_shafawi, .tj-iqlab, .tj-idgham_ghunnah, .tj-idgham_shafawi, .sw-ghunnah { --tj: var(--tj-ghunnah); }
+.tj-qalaqah, .sw-qalqalah { --tj: var(--tj-qalqalah); }
+.tj-ham_wasl, .tj-laam_shamsiyah, .tj-slnt, .tj-idgham_wo_ghunnah, .tj-idgham_mutajanisayn, .tj-idgham_mutaqaribayn, .sw-silent { --tj: var(--tj-silent); }
+.tj { color: var(--tj, inherit); }
+.no-tajweed .tj { color: inherit; }
+
+.tajweed-key { margin: 4px 0 8px; font-size: 0.875rem; color: var(--muted); }
+.tajweed-key summary { cursor: pointer; width: max-content; }
+.tajweed-key ul { list-style: none; margin: 8px 0 0; padding: 12px 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.tajweed-key li { display: flex; align-items: center; gap: 8px; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; background: var(--tj); flex: none; }
 
 .tr { margin: 8px 0 0; color: var(--muted); font-size: 0.975rem; }
 .no-tr .tr { display: none; }

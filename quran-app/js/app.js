@@ -219,7 +219,9 @@ function renderSurah() {
 
     ${chapter.bismillah_pre ? '<p class="ar basmala" lang="ar" dir="rtl">بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</p>' : ''}
 
-    <div class="ayat${settings.showTranslation ? '' : ' no-tr'}" id="ayat">
+    ${tajweedLegend()}
+
+    <div class="ayat${settings.showTranslation ? '' : ' no-tr'}${settings.tajweed ? '' : ' no-tajweed'}" id="ayat">
       ${verses.map((v) => ayahHtml(v, mem.has(v.n))).join('')}
     </div>`;
 
@@ -261,6 +263,23 @@ function renderSurah() {
   loadAudioState();
 }
 
+const TAJWEED_KEY = [
+  ['madd-6', 'Necessary madd · 6'],
+  ['madd-4', 'Obligatory madd · 4–5'],
+  ['madd-246', 'Permissible madd · 2, 4, 6'],
+  ['madd-2', 'Normal madd · 2'],
+  ['ghunnah', 'Ghunnah · ikhfa · iqlab · idgham with ghunnah'],
+  ['qalqalah', 'Qalqalah'],
+  ['silent', 'Not pronounced · idgham without ghunnah'],
+];
+
+function tajweedLegend() {
+  return `<details class="tajweed-key"${settings.tajweed ? '' : ' hidden'}>
+    <summary>Tajweed colors</summary>
+    <ul>${TAJWEED_KEY.map(([k, label]) => `<li><span class="swatch sw-${k}"></span>${label}</li>`).join('')}</ul>
+  </details>`;
+}
+
 const ayahHtml = (v, memorized) => `
   <article class="ayah${memorized ? ' memorized' : ''}" data-n="${v.n}" id="a${v.n}">
     <div class="ayah-tools">
@@ -268,7 +287,7 @@ const ayahHtml = (v, memorized) => `
       <button class="icon-btn play-one" type="button" aria-label="Play ayah ${v.n}" title="Play this ayah">${icons.play}</button>
       <button class="icon-btn mem" type="button" aria-pressed="${memorized}" aria-label="Memorized ayah ${v.n}" title="Mark as memorized">${icons.check}</button>
     </div>
-    <p class="ar ayah-text" lang="ar" dir="rtl">${esc(v.text)} <span class="end">﴿${arNum(v.n)}﴾</span></p>
+    <p class="ar ayah-text" lang="ar" dir="rtl">${v.html} <span class="ayah-end">${arNum(v.n)}</span></p>
     <p class="tr">${esc(v.translation)}</p>
   </article>`;
 
@@ -703,6 +722,7 @@ const form = dlg.querySelector('form');
 $('#open-settings').addEventListener('click', () => {
   form.theme.value = settings.theme;
   form.showTranslation.checked = settings.showTranslation;
+  form.tajweed.checked = settings.tajweed;
   form.autoscroll.checked = settings.autoscroll;
   form.speed.value = String(settings.speed);
   dlg.showModal();
@@ -712,12 +732,16 @@ form.addEventListener('change', () => {
   saveSettings({
     theme: form.theme.value,
     showTranslation: form.showTranslation.checked,
+    tajweed: form.tajweed.checked,
     autoscroll: form.autoscroll.checked,
     speed: Number(form.speed.value),
   });
   applyTheme();
   player.setRate(settings.speed);
   $('#ayat')?.classList.toggle('no-tr', !settings.showTranslation);
+  $('#ayat')?.classList.toggle('no-tajweed', !settings.tajweed);
+  const key = document.querySelector('.tajweed-key');
+  if (key) key.hidden = !settings.tajweed;
   if (current && $('#plan')) updatePlan();
 });
 

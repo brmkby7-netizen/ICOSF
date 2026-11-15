@@ -13,7 +13,7 @@ A small installable web app (PWA) for memorizing the Quran ayah by ayah. You can
 - **Reciters**
   - **Idris Abkar**: all 114 surahs. Ayah timings come from mp3quran.net, so looping works straight away.
   - **Islam Sobhi**: 109 surahs. mp3quran.net doesn't publish ayah timings for this recording, so you mark them once per surah: tap along while the surah plays, once when ayah 1 begins and once at the end of each ayah. The timings are saved on the device. You can save part-way and continue later, or re-mark at any time.
-- **Ayah-by-ayah reading view** in Uthmani script (Amiri Quran font), with an optional English translation (Saheeh International). The ayah being recited is highlighted, and the page can scroll to follow it.
+- **Ayah-by-ayah reading view** in Uthmani script using the KFGQPC Uthmanic Script Hafs font (the Madinah Mushaf font), with tajweed colors and a color key. Tajweed colors and the English translation (Saheeh International) can each be turned off (Saheeh International). The ayah being recited is highlighted, and the page can scroll to follow it.
 - **Progress**: mark single ayat or whole surahs as memorized, and see your totals by surah and by juz.
 - **Offline**: the app itself, plus any Quran text and timings you've already opened, are cached for offline use. You can also save a surah's audio for offline playback.
 - Light and dark mode, playback speed, lock-screen media controls, and backup export/import (Settings).
@@ -34,7 +34,7 @@ Opening `index.html` directly from disk won't work, because ES modules and the s
 
 | What | Source |
 | --- | --- |
-| Surah list, Uthmani text, translation, juz boundaries | `api.quran.com/api/v4` |
+| Surah list, Uthmani text with tajweed markup, translation, juz boundaries | `api.quran.com/api/v4` |
 | Recitation audio (whole-surah MP3s) | `cdn.mp3quran.net` |
 | Reciter surah lists, Idris Abkar ayah timings | `mp3quran.net/api/v3` |
 
@@ -52,6 +52,8 @@ js/api.js             Quran.com and mp3quran.net clients, offline audio
 js/storage.js         localStorage: settings, memorized ayat, timings, backup
 js/ui.js              helpers and icons
 sw.js                 service worker (offline cache)
+fonts/                KFGQPC Uthmanic Script Hafs (unmodified; free to use and
+                      redistribute under the King Fahd Complex licence in the font)
 ```
 
 ## Adding a reciter

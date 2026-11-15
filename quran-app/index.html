@@ -12,7 +12,8 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="preload" href="fonts/kfgqpc-uthmanic-hafs.otf" as="font" type="font/otf" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -57,6 +58,11 @@
       </label>
 
       <label class="field check">
+        <input type="checkbox" name="tajweed">
+        <span>Tajweed colors</span>
+      </label>
+
+      <label class="field check">
         <input type="checkbox" name="autoscroll">
         <span>Scroll to the ayah being recited</span>
       </label>
@@ -81,7 +87,7 @@
         </div>
       </div>
 
-      <p class="muted small credits">Text and translation: Quran.com. Recitations and Idris Abkar timings: mp3quran.net.</p>
+      <p class="muted small credits">Text, tajweed and translation: Quran.com. Quran font: KFGQPC Uthmanic Script Hafs, © King Fahd Glorious Quran Printing Complex. Recitations and Idris Abkar timings: mp3quran.net.</p>
     </form>
   </dialog>
 

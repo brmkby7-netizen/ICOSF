@@ -26,6 +26,7 @@ function remove(key) {
 const DEFAULTS = {
   reciter: 'abkar',
   showTranslation: true,
+  tajweed: true,
   autoscroll: true,
   theme: 'auto',
   repeats: 3,

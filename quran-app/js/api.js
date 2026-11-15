@@ -49,16 +49,51 @@ export async function getChapters() {
   return data.chapters;
 }
 
+// Quran.com tajweed markup: <tajweed class=rule>…</tajweed> around letters and
+// <span class=end>١</span> for the ayah number. Rebuild it as safe HTML: only whitelisted
+// tajweed spans survive, all text is escaped, and the ayah number is dropped (we add our own).
+const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const escape = (s) => s.replace(/[&<>"']/g, (c) => ESC[c]);
+
+function parseTajweed(markup) {
+  const src = String(markup || '').replace(/<span class=["']?end["']?>[^<]*<\/span>/g, '');
+  let html = '';
+  let plain = '';
+  let open = 0;
+  let last = 0;
+  for (const m of src.matchAll(/<(\/?)(tajweed|span)\b([^>]*)>/g)) {
+    const text = src.slice(last, m.index);
+    html += escape(text);
+    plain += text;
+    last = m.index + m[0].length;
+    if (m[1]) {
+      if (open) { html += '</span>'; open--; }
+    } else {
+      const rule = /class=["']?([a-z_]+)/.exec(m[3])?.[1];
+      html += rule ? `<span class="tj tj-${rule}">` : '<span>';
+      open++;
+    }
+  }
+  const tail = src.slice(last);
+  html += escape(tail) + '</span>'.repeat(open);
+  plain += tail;
+  return { html: html.trim(), plain: plain.replace(/\s+/g, ' ').trim() };
+}
+
 export async function getVerses(surah) {
   const [arabic, english] = await Promise.all([
-    getJson(`${QURAN}/quran/verses/uthmani?chapter_number=${surah}`),
+    getJson(`${QURAN}/quran/verses/uthmani_tajweed?chapter_number=${surah}`),
     getJson(`${QURAN}/quran/translations/${TRANSLATION_ID}?chapter_number=${surah}`),
   ]);
-  return arabic.verses.map((v, i) => ({
-    n: Number(v.verse_key.split(':')[1]),
-    text: v.text_uthmani.trim(),
-    translation: cleanTranslation(english.translations[i]?.text),
-  }));
+  return arabic.verses.map((v, i) => {
+    const { html, plain } = parseTajweed(v.text_uthmani_tajweed);
+    return {
+      n: Number(v.verse_key.split(':')[1]),
+      text: plain,
+      html,
+      translation: cleanTranslation(english.translations[i]?.text),
+    };
+  });
 }
 
 // [{ juz, ranges: { [surah]: [from, to] }, count }]

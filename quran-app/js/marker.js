@@ -60,7 +60,7 @@ export function renderMarker(root, { chapter, verses, reciter, src, existing, on
     const m = marks.length;
     const complete = m === N + 1;
     const current = Math.min(Math.max(m, 1), N);
-    els.text.innerHTML = `${esc(verses[current - 1].text)} <span class="end">﴿${arNum(current)}﴾</span>`;
+    els.text.innerHTML = `${verses[current - 1].html} <span class="ayah-end">${arNum(current)}</span>`;
     if (complete) {
       els.prompt.textContent = 'All ayat marked. Save your timings.';
       els.tap.textContent = 'Done';
