@@ -1,6 +1,7 @@
 // Service worker: app shell + Quran text/translation/timings cached for offline use.
 // Recitation audio is saved separately (on request) by the app in the "qm-audio" cache.
-const SHELL_CACHE = 'qm-shell-v4';
+const VERSION = '2026.11.15-2';
+const SHELL_CACHE = `qm-shell-${VERSION}`;
 const DATA_CACHE = 'qm-data-v1';
 const KEEP = new Set([SHELL_CACHE, DATA_CACHE, 'qm-audio']);
 
@@ -30,7 +31,16 @@ const DATA_HOSTS = new Set([
 ]);
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(SHELL_CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' bypasses the browser's HTTP cache, so an update never re-stores old files.
+  event.waitUntil(
+    caches.open(SHELL_CACHE)
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'version') event.source.postMessage({ version: VERSION });
 });
 
 self.addEventListener('activate', (event) => {
@@ -41,7 +51,19 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Serve from cache straight away, refresh it in the background.
+// App files: always try the network first (fresh code after every update), cache when offline.
+async function networkFirst(request, fallbackUrl) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const res = await fetch(request, { cache: 'no-cache' });
+    if (res.ok) cache.put(request, res.clone());
+    return res;
+  } catch {
+    return (await cache.match(request)) || (fallbackUrl && (await cache.match(fallbackUrl))) || Response.error();
+  }
+}
+
+// Quran data: serve from cache straight away, refresh it in the background.
 async function staleWhileRevalidate(cacheName, request, fallbackUrl) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request, { ignoreSearch: false });
@@ -68,7 +90,7 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin === self.location.origin) {
     const fallback = req.mode === 'navigate' ? './index.html' : null;
-    event.respondWith(staleWhileRevalidate(SHELL_CACHE, req, fallback));
+    event.respondWith(networkFirst(req, fallback));
   } else if (DATA_HOSTS.has(url.hostname)) {
     event.respondWith(staleWhileRevalidate(DATA_CACHE, req));
   }

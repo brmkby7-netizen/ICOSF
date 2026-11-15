@@ -776,7 +776,15 @@ $('#import').addEventListener('change', async (e) => {
 // ---------- boot ----------
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('sw.js').catch(() => { /* offline support unavailable */ });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => { /* offline support unavailable */ });
+  // When a new version takes over, reload once so the page runs the new code.
+  let reloaded = false;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
 }
 
 route();
