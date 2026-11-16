@@ -8,8 +8,10 @@ window.SITE = {
   brand: "The Green Goat",
   role: "Automotive CGI & Unreal Engine cinematics",
   // Leave email empty to hide the email button.
-  email: "",
+  email: "b.greengoat@gmail.com",
   links: {
+    Instagram: "https://www.instagram.com/thegreengoat_artstudio",
+    LinkedIn: "https://www.linkedin.com/in/riadh-ben-youssef-781752184",
     ArtStation: "https://www.artstation.com/bahribenyoussef2",
     // Add more, e.g.  Instagram: "https://instagram.com/…",  LinkedIn: "…"
   },
