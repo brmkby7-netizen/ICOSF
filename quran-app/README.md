@@ -19,6 +19,7 @@ A small installable web app (PWA) for memorizing the Quran ayah by ayah. You can
 - **Ayah-by-ayah reading view** in Uthmani script using the KFGQPC Uthmanic Script Hafs font (the Madinah Mushaf font), with tajweed colors and a color key. Tajweed colors and the English translation (Saheeh International) can each be turned off (Saheeh International). The ayah being recited is highlighted, and the page can scroll to follow it.
 - **Progress**: mark single ayat or whole surahs as memorized, and see your totals by surah and by juz.
 - **Offline**: the app itself, plus any Quran text and timings you've already opened, are cached for offline use. You can also save a surah's audio for offline playback.
+- **Apple-style interface**: the system font, large titles that collapse into a translucent top bar, a bottom tab bar (Today, Surahs, Progress, Settings), grouped inset lists, iOS switches, a floating mini player and bottom sheets.
 - Light and dark mode, playback speed, lock-screen media controls, and backup export/import (Settings).
 
 ## Running it

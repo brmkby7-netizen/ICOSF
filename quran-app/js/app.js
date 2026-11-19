@@ -65,11 +65,12 @@ async function route() {
   if (cleanup) { cleanup(); cleanup = null; }
   if (!player.session) hideBar();
   const [page, arg] = location.hash.replace(/^#\/?/, '').split('/');
-  const tab = page === 'progress' ? 'progress' : page === 'today' || page === 'review' ? 'today' : '';
+  const tab = page === 'progress' || page === 'settings' ? page : page === 'today' || page === 'review' ? 'today' : '';
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('active', a.dataset.nav === tab);
   updateDueBadge();
   try {
-    if (page === 'today') await todayView();
+    if (page === 'settings') settingsView();
+    else if (page === 'today') await todayView();
     else if (page === 'review') await reviewView();
     else if (page === 'surah') await surahView(Number(arg));
     else if (page === 'mark') await markView(Number(arg));
@@ -79,6 +80,7 @@ async function route() {
     console.error(err);
     view.innerHTML = errorView(err);
   }
+  setupNav();
 }
 
 window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
@@ -93,10 +95,11 @@ async function homeView() {
   const done = store.totalMemorized();
 
   view.innerHTML = `
+    <h1 class="large-title">Surahs</h1>
     ${lastCh ? `
       <a class="card continue" href="#/surah/${last.surah}">
-        <span class="eyebrow">Continue</span>
         <span class="continue-row">
+          <span class="eyebrow">Continue</span>
           <strong>${esc(lastCh.name_simple)}</strong>
           <span class="muted">Ayat ${last.from}–${last.to}</span>
         </span>
@@ -110,7 +113,7 @@ async function homeView() {
     <div class="search">
       <input type="search" id="q" placeholder="Search by name or number" aria-label="Search surahs" autocomplete="off">
     </div>
-    <ol class="surah-list" id="list">${chapters.map(surahRow).join('')}</ol>
+    <ol class="list surah-list" id="list">${chapters.map(surahRow).join('')}</ol>
     <p class="empty-search muted" id="no-results" hidden>No surah matches that search.</p>`;
 
   const norm = (s) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '');
@@ -185,41 +188,44 @@ function renderSurah() {
     <a href="#/" class="back">${icons.back}<span>Surahs</span></a>
     <header class="surah-head">
       <p class="ar surah-title-ar" lang="ar" dir="rtl">${esc(chapter.name_arabic)}</p>
-      <h1>${chapter.id}. ${esc(chapter.name_simple)}</h1>
-      <p class="muted">${esc(chapter.translated_name.name)} · ${chapter.verses_count} ayat · ${chapter.revelation_place === 'makkah' ? 'Makki' : 'Madani'}</p>
+      <h1>${esc(chapter.name_simple)}</h1>
+      <p class="muted">${chapter.id} · ${esc(chapter.translated_name.name)} · ${chapter.verses_count} ayat · ${chapter.revelation_place === 'makkah' ? 'Makki' : 'Madani'}</p>
     </header>
 
-    <section class="card practice" aria-label="Practice">
-      <div class="field-row">
-        <span class="label">Reciter</span>
-        <select id="reciter" class="reciter-select" aria-label="Reciter">${reciterOptions()}</select>
+    <section class="practice" aria-label="Practice">
+      <h2 class="list-header">Practice</h2>
+      <div class="list">
+        <label class="row">
+          <span class="row-label">Reciter</span>
+          <select id="reciter" class="row-select reciter-select" aria-label="Reciter">${reciterOptions()}</select>
+        </label>
       </div>
       <div id="audio-status"></div>
       <div id="practice-controls" hidden>
-        <div class="grid two">
-          <label class="field"><span>From ayah</span><select id="from" data-v="${from}"></select></label>
-          <label class="field"><span>To ayah</span><select id="to" data-v="${to}"></select></label>
+        <div class="list">
+          <label class="row"><span class="row-label">From ayah</span><select id="from" class="row-select" data-v="${from}"></select></label>
+          <label class="row"><span class="row-label">To ayah</span><select id="to" class="row-select" data-v="${to}"></select></label>
         </div>
-        <div class="grid three">
-          <label class="field"><span>Each ayah</span>
-            <select id="repeats">${countOptions(settings.repeats)}</select>
+        <div class="list">
+          <label class="row"><span class="row-label">Each ayah</span>
+            <select id="repeats" class="row-select">${countOptions(settings.repeats)}</select>
           </label>
-          <label class="field"><span>Link together</span>
-            <select id="link">${countOptions(settings.linkRepeats)}</select>
+          <label class="row"><span class="row-label">Link together</span>
+            <select id="link" class="row-select">${countOptions(settings.linkRepeats)}</select>
           </label>
-          <label class="field"><span>Pause to recite</span>
-            <select id="gap">${[0, 1, 2, 3, 5, 8].map((v) => `<option value="${v}" ${v === settings.gap ? 'selected' : ''}>${v ? `${v} s` : 'None'}</option>`).join('')}</select>
+          <label class="row"><span class="row-label">Pause to recite</span>
+            <select id="gap" class="row-select">${[0, 1, 2, 3, 5, 8].map((v) => `<option value="${v}" ${v === settings.gap ? 'selected' : ''}>${v ? `${v} s` : 'None'}</option>`).join('')}</select>
           </label>
         </div>
+        <p class="list-footer plan" id="plan"></p>
         <div class="session-choice">
           <button class="btn primary wide" id="start" type="button">${icons.play}<span id="start-label">Start</span></button>
-          <p class="plan muted small" id="plan"></p>
         </div>
         <div class="session-choice" id="move-on-box" hidden>
           <button class="btn wide move-on" id="move-on" type="button"><span id="move-on-label"></span>${icons.next}</button>
-          <p class="plan muted small" id="move-on-plan"></p>
+          <p class="list-footer plan" id="move-on-plan"></p>
         </div>
-        <p class="plan muted small" id="end-note" hidden></p>
+        <p class="list-footer plan" id="end-note" hidden></p>
       </div>
     </section>
 
@@ -812,8 +818,7 @@ function revisionCard() {
   const due = revision.dueCount();
   if (!due) return '';
   return `<a class="card revision-card" href="#/today">
-    <span class="eyebrow">Today’s revision</span>
-    <span class="continue-row"><strong>${due} ayat due</strong><span class="btn primary small-btn">Revise</span></span>
+    <span class="continue-row"><span class="eyebrow">Today’s revision</span><strong>${due} ${due === 1 ? 'ayah' : 'ayat'} due</strong></span>
   </a>`;
 }
 
@@ -830,7 +835,7 @@ async function todayView() {
 
   if (!plan.total) {
     view.innerHTML = `
-      <h1 class="page-title">Today’s revision</h1>
+      <h1 class="page-title">Today</h1>
       <div class="card explain">
         <p><strong>Nothing to revise yet.</strong></p>
         <p class="muted">Ayat join your revision automatically:</p>
@@ -854,12 +859,12 @@ async function todayView() {
       <button class="btn small-btn" data-start="${i}">Revise</button>
     </li>`;
   const section = (title, list, offset) => list.length
-    ? `<h2 class="section-title">${title}</h2><ol class="passages">${list.map((p, i) => row(p, i + offset)).join('')}</ol>` : '';
+    ? `<h2 class="list-header">${title}</h2><ol class="list passages">${list.map((p, i) => row(p, i + offset)).join('')}</ol>` : '';
 
   view.innerHTML = `
-    <h1 class="page-title">Today’s revision</h1>
+    <h1 class="page-title">Today</h1>
     ${plan.today.length ? `
-      <p class="muted">${plan.shownAyat} ayat in ${plan.today.length} ${plan.today.length === 1 ? 'passage' : 'passages'}${plan.doneToday ? ` · ${plan.doneToday} done today` : ''}</p>
+      <p class="muted subtitle">${plan.shownAyat} ayat in ${plan.today.length} ${plan.today.length === 1 ? 'passage' : 'passages'}${plan.doneToday ? ` · ${plan.doneToday} done today` : ''}</p>
       <button class="btn primary wide" id="start-review" type="button">${icons.play}<span>Start revision</span></button>
       ${plan.behind ? `<div class="notice small"><p>You’re behind on revision (${plan.dueAyat} ayat due, daily limit ${settings.reviewCap}). The rest will wait for the next days. Consider revising before learning new ayat until you catch up.</p></div>` : ''}
       ${section('Old revision', old, 0)}
@@ -1026,7 +1031,7 @@ function revisionStats() {
   if (!st.total) return '';
   const weak = revision.toPassages(st.weak).slice(0, 8);
   return `
-    <h2 class="section-title">Revision</h2>
+    <h2 class="list-header">Revision</h2>
     <section class="stats">
       <div class="stat"><span class="stat-n">${st.total}</span><span class="muted small">ayat in revision</span></div>
       <div class="stat"><span class="stat-n">${st.due}</span><span class="muted small">due now</span></div>
@@ -1070,12 +1075,12 @@ async function progressView() {
 
     ${revisionStats()}
 
-    <h2 class="section-title">By juz</h2>
+    <h2 class="list-header">By juz</h2>
     <div class="juz-grid">${juzHtml}</div>
 
-    <h2 class="section-title">By surah</h2>
+    <h2 class="list-header">By surah</h2>
     ${inProgress.length
-      ? `<ol class="surah-list">${inProgress.map(surahRow).join('')}</ol>`
+      ? `<ol class="list surah-list">${inProgress.map(surahRow).join('')}</ol>`
       : `<div class="empty"><p class="muted">Nothing marked yet. Open a surah and tap ✓ next to each ayah you’ve memorized.</p><a class="btn" href="#/">Browse surahs</a></div>`}`;
 }
 
@@ -1165,66 +1170,127 @@ bar.addEventListener('click', (e) => {
 
 // ---------- settings ----------
 
-const dlg = $('#settings');
-const form = dlg.querySelector('form');
+const APP_VERSION = '2026.11.19-1';
 
-$('#open-settings').addEventListener('click', () => {
-  form.theme.value = settings.theme;
-  form.showTranslation.checked = settings.showTranslation;
-  form.tajweed.checked = settings.tajweed;
-  form.autoscroll.checked = settings.autoscroll;
-  form.speed.value = String(settings.speed);
-  form.reviewCap.value = String(settings.reviewCap);
-  form.maxGap.value = String(settings.maxGap);
-  dlg.showModal();
-});
+const selectRow = (name, label, options, value) => `
+  <label class="row">
+    <span class="row-label">${label}</span>
+    <select name="${name}" class="row-select">${options.map(([v, t]) => `<option value="${v}" ${String(v) === String(value) ? 'selected' : ''}>${t}</option>`).join('')}</select>
+  </label>`;
 
-form.addEventListener('change', () => {
-  saveSettings({
-    theme: form.theme.value,
-    showTranslation: form.showTranslation.checked,
-    tajweed: form.tajweed.checked,
-    autoscroll: form.autoscroll.checked,
-    speed: Number(form.speed.value),
-    reviewCap: Number(form.reviewCap.value),
-    maxGap: Number(form.maxGap.value),
-  });
-  applyTheme();
-  player.setRate(settings.speed);
-  $('#ayat')?.classList.toggle('no-tr', !settings.showTranslation);
-  $('#ayat')?.classList.toggle('no-tajweed', !settings.tajweed);
-  const key = document.querySelector('.tajweed-key');
-  if (key) key.hidden = !settings.tajweed;
-  if (current && $('#plan')) updatePlan();
-});
+const switchRow = (name, label, on) => `
+  <label class="row switch-row">
+    <span class="row-label">${label}</span>
+    <input type="checkbox" class="switch" name="${name}" ${on ? 'checked' : ''}>
+  </label>`;
 
-dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+function settingsView() {
+  view.innerHTML = `
+    <h1 class="large-title">Settings</h1>
+    <form id="settings-form" class="settings" onsubmit="return false">
+      <h2 class="list-header">Reading</h2>
+      <div class="list">
+        ${selectRow('theme', 'Appearance', [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']], settings.theme)}
+        ${switchRow('tajweed', 'Tajweed colors', settings.tajweed)}
+        ${switchRow('showTranslation', 'English translation', settings.showTranslation)}
+        ${switchRow('autoscroll', 'Follow the recitation', settings.autoscroll)}
+      </div>
+      <p class="list-footer">The translation is Saheeh International. “Follow the recitation” scrolls to the ayah being recited.</p>
 
-$('#export').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(store.exportAll(), null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `hifz-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-});
+      <h2 class="list-header">Playback</h2>
+      <div class="list">
+        ${selectRow('speed', 'Speed', [['0.75', '0.75×'], ['0.9', '0.9×'], ['1', 'Normal'], ['1.15', '1.15×'], ['1.25', '1.25×']], settings.speed)}
+      </div>
 
-$('#import').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    store.importAll(JSON.parse(await file.text()));
-    settings = store.getSettings();
+      <h2 class="list-header">Revision</h2>
+      <div class="list">
+        ${selectRow('reviewCap', 'Daily limit', [20, 30, 50, 80, 120, 200].map((v) => [v, `${v} ayat`]), settings.reviewCap)}
+        ${selectRow('maxGap', 'Longest gap', [7, 14, 21, 30, 45].map((v) => [v, `${v} days`]), settings.maxGap)}
+      </div>
+      <p class="list-footer">Every ayah in your revision comes back at least once within the longest gap.</p>
+
+      <h2 class="list-header">Your data</h2>
+      <div class="list">
+        <button type="button" class="row row-action" id="export">Export backup</button>
+        <label class="row row-action">Import backup<input type="file" id="import" accept="application/json" hidden></label>
+      </div>
+      <p class="list-footer">Your progress, revision and timings are saved only on this device. Export a backup to keep them safe or move them to another device.</p>
+
+      <h2 class="list-header">About</h2>
+      <div class="list">
+        <div class="row"><span class="row-label">Version</span><span class="row-value" id="app-version">${APP_VERSION}</span></div>
+      </div>
+      <p class="list-footer">Text, tajweed and translation: Quran.com. Quran font: KFGQPC Uthmanic Script Hafs, © King Fahd Glorious Quran Printing Complex. Recitations and ayah timings: mp3quran.net.</p>
+    </form>`;
+
+  const form = $('#settings-form');
+  form.addEventListener('change', (e) => {
+    if (e.target.id === 'import') return;
+    saveSettings({
+      theme: form.theme.value,
+      showTranslation: form.showTranslation.checked,
+      tajweed: form.tajweed.checked,
+      autoscroll: form.autoscroll.checked,
+      speed: Number(form.speed.value),
+      reviewCap: Number(form.reviewCap.value),
+      maxGap: Number(form.maxGap.value),
+    });
     applyTheme();
     player.setRate(settings.speed);
-    dlg.close();
-    toast('Backup restored.');
-    route();
-  } catch (err) {
-    toast(err.message || 'Couldn’t read that file.');
-  }
-  e.target.value = '';
-});
+  });
+
+  $('#export').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(store.exportAll(), null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `hifz-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  $('#import').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      store.importAll(JSON.parse(await file.text()));
+      settings = store.getSettings();
+      applyTheme();
+      player.setRate(settings.speed);
+      toast('Backup restored.');
+      route();
+    } catch (err) {
+      toast(err.message || 'Couldn’t read that file.');
+    }
+    e.target.value = '';
+  });
+}
+
+// ---------- navigation bar ----------
+// iOS-style: a large title in the page; once it scrolls under the bar, a small title appears
+// in the bar. A page's ".back" link moves into the bar's left side.
+
+const navbar = $('#navbar');
+const titleObserver = new IntersectionObserver(([entry]) => {
+  navbar.classList.toggle('collapsed', !entry.isIntersecting);
+}, { rootMargin: '-52px 0px 0px 0px' });
+
+function setupNav() {
+  const left = $('#nav-left');
+  left.innerHTML = '';
+  const back = view.querySelector('a.back');
+  if (back) left.append(back);
+  const title = view.querySelector('.large-title, .page-title, .surah-head h1');
+  $('#nav-title').textContent = title ? title.textContent.trim() : '';
+  titleObserver.disconnect();
+  navbar.classList.remove('collapsed');
+  if (title) titleObserver.observe(title);
+  onScroll();
+}
+
+function onScroll() {
+  navbar.classList.toggle('scrolled', window.scrollY > 2);
+}
+window.addEventListener('scroll', onScroll, { passive: true });
 
 // ---------- boot ----------
 
