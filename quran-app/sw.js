@@ -1,9 +1,9 @@
 // Service worker: app shell + Quran text/translation/timings cached for offline use.
 // Recitation audio is saved separately (on request) by the app in the "qm-audio" cache.
-const VERSION = '2026.11.19-1';
+const VERSION = '2026.11.20-1';
 const SHELL_CACHE = `qm-shell-${VERSION}`;
 const DATA_CACHE = 'qm-data-v1';
-const KEEP = new Set([SHELL_CACHE, DATA_CACHE, 'qm-audio']);
+const KEEP = new Set([SHELL_CACHE, DATA_CACHE, 'qm-audio', 'qm-recite']);
 
 const SHELL = [
   './',
@@ -16,6 +16,12 @@ const SHELL = [
   './js/storage.js',
   './js/ui.js',
   './js/revision.js',
+  './js/recite/engine.js',
+  './js/recite/mel.js',
+  './js/recite/mic.js',
+  './js/recite/client.js',
+  './js/recite/session.js',
+  './js/recite/worker.js',
   './manifest.webmanifest',
   './icons/icon.svg',
   './fonts/kfgqpc-uthmanic-hafs.otf',
@@ -89,6 +95,11 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET' || req.headers.has('range')) return;
   const url = new URL(req.url);
 
+  // The recitation checker's large files (model, WebAssembly): from the one-time download, never re-fetched.
+  if (url.origin === self.location.origin && /\/(models|vendor)\//.test(url.pathname)) {
+    event.respondWith(caches.open('qm-recite').then((c) => c.match(req)).then((hit) => hit || fetch(req)));
+    return;
+  }
   if (url.origin === self.location.origin) {
     const fallback = req.mode === 'navigate' ? './index.html' : null;
     event.respondWith(networkFirst(req, fallback));

@@ -3,6 +3,9 @@ import * as store from './storage.js';
 import { Player } from './player.js';
 import { renderMarker } from './marker.js';
 import * as revision from './revision.js';
+import * as recite from './recite/client.js';
+import { ReciteSession } from './recite/session.js';
+import { ayahRef } from './recite/engine.js';
 import { $, esc, arNum, fmtDuration, maxContiguous, toast, icons } from './ui.js';
 
 const TOTAL_AYAT = 6236;
@@ -70,6 +73,7 @@ async function route() {
   updateDueBadge();
   try {
     if (page === 'settings') settingsView();
+    else if (page === 'test') await testView(Number(arg));
     else if (page === 'today') await todayView();
     else if (page === 'review') await reviewView();
     else if (page === 'surah') await surahView(Number(arg));
@@ -226,6 +230,10 @@ function renderSurah() {
           <p class="list-footer plan" id="move-on-plan"></p>
         </div>
         <p class="list-footer plan" id="end-note" hidden></p>
+        <div class="session-choice">
+          <button class="btn wide" id="test-me" type="button">${icons.mic}<span>Test yourself</span></button>
+          <p class="list-footer">Recite the range from memory; the app listens and reveals each word you get right.</p>
+        </div>
       </div>
     </section>
 
@@ -257,6 +265,10 @@ function renderSurah() {
   for (const id of ['from', 'to', 'repeats', 'link', 'gap']) $(`#${id}`).addEventListener('change', updatePlan);
   $('#start').addEventListener('click', startRange);
   $('#move-on').addEventListener('click', moveOn);
+  $('#test-me').addEventListener('click', () => {
+    rememberRange(readRange());
+    location.hash = `#/test/${current.num}`;
+  });
 
   $('#ayat').addEventListener('click', (e) => {
     const art = e.target.closest('.ayah');
@@ -631,6 +643,165 @@ async function rawTimings(r, surah) {
   if (mine) return { timings: mine, source: 'mine' };
   const auto = await api.getBundledTimings(r, surah);
   return { timings: auto, source: auto ? 'auto' : null };
+}
+
+// ---------- test yourself (recitation check) ----------
+
+const displayWords = (v) => v.text.split(/\s+/).filter((t) => t && !/^[۞۩]+$/.test(t));
+
+let testSession = null;
+
+async function testView(n) {
+  if (!(n >= 1 && n <= 114)) { location.hash = '#/'; return; }
+  view.innerHTML = loading();
+  await ensureChapters();
+  if (player.session) player.stop();
+  const chapter = chapters[n - 1];
+  const plan = store.getPlan(n) || { from: 1, to: Math.min(5, chapter.verses_count) };
+  const [verses, phon] = await Promise.all([api.getVerses(n), api.getPhonetic(n)]);
+  const range = verses.filter((v) => v.n >= plan.from && v.n <= plan.to);
+
+  const header = `
+    <a href="#/surah/${n}" class="back">${icons.back}<span>${esc(chapter.name_simple)}</span></a>
+    <h1 class="large-title">Test yourself</h1>
+    <p class="muted subtitle">${esc(chapter.name_simple)} · ${plan.from === plan.to ? `ayah ${plan.from}` : `ayat ${plan.from}–${plan.to}`}</p>`;
+
+  if (!(await recite.isDownloaded())) {
+    view.innerHTML = `${header}
+      <div class="card explain">
+        <p><strong>Check your recitation on this device</strong></p>
+        <p class="muted">Recite from memory and Hifz listens: each word you get right is revealed, missed or wrong words turn red, and tajweed points are underlined in orange.</p>
+        <p class="muted">This needs a one-time download of ${recite.TOTAL_MB} MB. After that it works offline, and your voice never leaves your phone.</p>
+        <button class="btn primary wide" id="get-model" type="button">Download (${recite.TOTAL_MB} MB)</button>
+        <div class="download-bar" id="dl" hidden><i></i></div>
+      </div>`;
+    $('#get-model').addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = 'Downloading…';
+      $('#dl').hidden = false;
+      try {
+        await recite.download((f) => { $('#dl i').style.width = `${Math.round(f * 100)}%`; });
+        route();
+      } catch {
+        toast('The download didn’t finish. Check your connection and try again.');
+        e.target.disabled = false;
+        e.target.textContent = `Download (${recite.TOTAL_MB} MB)`;
+      }
+    });
+    return;
+  }
+
+  view.innerHTML = `${header}
+    <div id="test-summary"></div>
+    <div class="test-legend">
+      <span><i class="dot ok"></i>Correct</span><span><i class="dot taj"></i>Tajweed or pronunciation point</span><span><i class="dot bad"></i>Missed or wrong</span>
+    </div>
+    <div class="t-list" id="t-list">
+      ${range.map((v, i) => `
+        <article class="t-ayah${i === 0 ? ' current' : ''}" data-i="${i}">
+          <p class="ar t-words" lang="ar" dir="rtl">${displayWords(v).map((w, k) => `<span class="w w-pending" data-k="${k}">${esc(w)}</span>`).join(' ')} <span class="ayah-end">${arNum(v.n)}</span></p>
+          <p class="t-note" hidden></p>
+        </article>`).join('')}
+    </div>
+    <div class="mic-dock">
+      <button class="mic-btn" id="mic" type="button" aria-label="Start reciting">${icons.mic}</button>
+      <span class="mic-status" id="mic-status">Preparing…</span>
+    </div>`;
+  document.body.classList.add('has-mic');
+
+  const ayat = range.map((v) => ({ ref: ayahRef(phon.ayat[v.n - 1], phon.kinds, phon.rules), verse: v }));
+  const status = (t) => { const el = $('#mic-status'); if (el) el.textContent = t; };
+  const lastNotes = new Map(); // "i:k" → notes, for tap-to-explain
+
+  try {
+    await recite.initModel();
+    status('Tap the microphone and recite from memory');
+  } catch {
+    status('The speech model couldn’t start on this device.');
+    $('#mic').disabled = true;
+  }
+
+  const paint = (i, words) => {
+    const art = view.querySelector(`.t-ayah[data-i="${i}"]`);
+    if (!art) return;
+    art.querySelectorAll('.w').forEach((el) => {
+      const k = Number(el.dataset.k);
+      const w = words[k];
+      if (!w) return;
+      el.className = `w w-${w.verdict}`;
+      if (w.notes?.length) lastNotes.set(`${i}:${k}`, w.notes); else lastNotes.delete(`${i}:${k}`);
+    });
+  };
+  const setCurrent = (i) => view.querySelectorAll('.t-ayah').forEach((el) => el.classList.toggle('current', Number(el.dataset.i) === i));
+
+  $('#t-list').addEventListener('click', (e) => {
+    const el = e.target.closest('.w');
+    if (!el) return;
+    const art = el.closest('.t-ayah');
+    const notes = lastNotes.get(`${art.dataset.i}:${el.dataset.k}`);
+    const note = art.querySelector('.t-note');
+    if (!notes) { note.hidden = true; return; }
+    note.hidden = false;
+    note.innerHTML = `<span class="ar">${esc(el.textContent)}</span> ${notes.map((x) => esc(x.msg)).join(' · ')}`;
+  });
+
+  const finish = (results) => {
+    document.body.classList.remove('listening');
+    $('#mic').innerHTML = icons.mic;
+    $('#mic').setAttribute('aria-label', 'Start again');
+    const all = results.flat().filter((w) => w.verdict !== 'pending');
+    const ok = all.filter((w) => w.verdict === 'ok' || w.verdict === 'tajweed').length;
+    const bad = all.filter((w) => w.verdict === 'missed' || w.verdict === 'wrong').length;
+    const taj = all.filter((w) => w.verdict === 'tajweed').length;
+    const weak = results.map((ws, i) => (ws.some((w) => w.verdict === 'missed' || w.verdict === 'wrong') ? range[i].n : null)).filter(Boolean);
+    status('Tap the microphone to try again');
+    $('#test-summary').innerHTML = all.length ? `
+      <div class="card summary">
+        <p class="summary-big">${ok} of ${all.length} words</p>
+        <p class="muted">${bad ? `${bad} missed or wrong` : 'No missed words. Masha’Allah!'}${taj ? ` · ${taj} tajweed ${taj === 1 ? 'point' : 'points'}` : ''}</p>
+        ${weak.length ? `<button class="btn small-btn" id="weak-rev" type="button">Revise ayat ${weak.join(', ')} tomorrow</button>` : ''}
+      </div>` : '';
+    $('#weak-rev')?.addEventListener('click', (e) => {
+      revision.addNew(n, weak);
+      revision.grade(n, Object.fromEntries(weak.map((a) => [a, 'again'])), { maxGap: settings.maxGap });
+      updateDueBadge();
+      e.target.disabled = true;
+      e.target.textContent = 'Added to your revision';
+    });
+    testSession = null;
+  };
+
+  $('#mic').addEventListener('click', async () => {
+    if (testSession) { status('Checking…'); finish(await testSession.stop()); return; }
+    // fresh start
+    view.querySelectorAll('.w').forEach((el) => { el.className = 'w w-pending'; });
+    view.querySelectorAll('.t-note').forEach((el) => { el.hidden = true; });
+    lastNotes.clear();
+    $('#test-summary').innerHTML = '';
+    setCurrent(0);
+    testSession = new ReciteSession(ayat, {
+      onUpdate: paint,
+      onAyah: (i) => { setCurrent(i + 1); status(i + 1 < ayat.length ? `Listening… ayah ${range[i + 1].n}` : 'Checking…'); },
+      onLevel: (lvl) => { $('#mic')?.style.setProperty('--lvl', lvl.toFixed(2)); },
+      onError: (e) => { console.error('recite error', e && e.stack || e); status('Something went wrong while listening.'); },
+      onDone: finish,
+    });
+    try {
+      await testSession.start();
+      document.body.classList.add('listening');
+      $('#mic').innerHTML = icons.stop;
+      $('#mic').setAttribute('aria-label', 'Stop');
+      status(`Listening… ayah ${range[0].n}`);
+    } catch {
+      testSession = null;
+      status('Microphone access is needed. Allow it in your browser settings.');
+    }
+  });
+
+  cleanup = () => {
+    document.body.classList.remove('has-mic', 'listening');
+    if (testSession) { testSession.stop(); testSession = null; }
+  };
 }
 
 // ---------- per-ayah timing fixes ----------
@@ -1170,7 +1341,7 @@ bar.addEventListener('click', (e) => {
 
 // ---------- settings ----------
 
-const APP_VERSION = '2026.11.19-1';
+const APP_VERSION = '2026.11.20-1';
 
 const selectRow = (name, label, options, value) => `
   <label class="row">
@@ -1209,6 +1380,13 @@ function settingsView() {
       </div>
       <p class="list-footer">Every ayah in your revision comes back at least once within the longest gap.</p>
 
+      <h2 class="list-header">Recitation check</h2>
+      <div class="list">
+        <div class="row"><span class="row-label">Speech model</span><span class="row-value" id="model-state">Checking…</span></div>
+        <button type="button" class="row row-action" id="model-remove" hidden>Remove download</button>
+      </div>
+      <p class="list-footer">Used by “Test yourself”. Runs on this device; your voice is never uploaded.</p>
+
       <h2 class="list-header">Your data</h2>
       <div class="list">
         <button type="button" class="row row-action" id="export">Export backup</button>
@@ -1224,6 +1402,18 @@ function settingsView() {
     </form>`;
 
   const form = $('#settings-form');
+  recite.isDownloaded().then((ok) => {
+    const st = $('#model-state');
+    if (!st) return;
+    st.textContent = ok ? `Downloaded (${recite.TOTAL_MB} MB)` : 'Not downloaded';
+    $('#model-remove').hidden = !ok;
+  });
+  $('#model-remove').addEventListener('click', async () => {
+    await recite.remove();
+    $('#model-state').textContent = 'Not downloaded';
+    $('#model-remove').hidden = true;
+    toast('Speech model removed.');
+  });
   form.addEventListener('change', (e) => {
     if (e.target.id === 'import') return;
     saveSettings({

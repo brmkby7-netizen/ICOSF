@@ -238,6 +238,11 @@ export async function getVerses(surah) {
   });
 }
 
+// Expected pronunciation of every ayah of a surah (for the recitation checker): data/phonetic/NNN.json
+export function getPhonetic(surah) {
+  return getJson(new URL(`../data/phonetic/${String(surah).padStart(3, '0')}.json`, import.meta.url).href);
+}
+
 // [{ juz, ranges: { [surah]: [from, to] }, count }]
 export async function getJuzs() {
   const data = await getJson(`${QURAN}/juzs`);

@@ -12,6 +12,7 @@ A small installable web app (PWA) for memorizing the Quran ayah by ayah. You can
 - **Move on**: when you're ready, the range slides forward by one ayah without starting over. You read the new ayah (6) ×3, then the new range (2–6) together ×2. The range is saved per surah, so you can pick up another day. There's an optional pause after each repeat so you can recite.
 - **Today's revision** (spaced repetition): when Move on drops an ayah from the range, it joins your revision automatically. It comes back later that day, the next morning, then after 2, 3 and 7 days, then roughly doubling, but never longer than a maximum gap (30 days by default). Ayat you tick ✓ as already memorized join the long-term rotation; ticking a whole surah spreads it over two weeks. The Today tab lists due passages, old revision first, up to a daily limit, and says when you're behind. Each review: recite from memory (with an optional first-word hint or Listen), reveal, tap any ayah you slipped on (it comes back tomorrow), then grade Forgot / Hard / Good / Easy. Progress shows ayat in revision and weak spots.
 - **Fix an ayah's timing** (any reciter): tap the clock icon next to an ayah to nudge its start or end, listen to check, or play around the ayah and tap "Start is here" / "End is here". Neighbouring edges can move with it; fixes are saved per reciter and can be reset.
+- **Test yourself (recitation check)**: recite a range from memory and the app listens on the device. Each word you get right is revealed; missed or wrong words turn red; tajweed and single-sound points get a soft orange underline you can tap for the explanation (for example "necessary madd too short: 3 counts instead of 6"). It follows you from ayah to ayah, notices a skipped word or ayah, handles stops and restarts, and offers to send ayat with mistakes to revision. Uses the open HisnLabs tajweed-v2 speech model (Apache-2.0) with ONNX Runtime Web; a one-time 37 MB download, then it works offline and your voice never leaves the phone. Tested on professional recordings: about 97% of skipped words caught, about 2% of correct words falsely flagged red.
 - **Hide text** on the surah page: blur the Arabic and tap an ayah to check yourself.
 - **Reciters**: every mp3quran.net Hafs recording with published ayah timings (about 100, including Alafasy, Al-Sudais, Al-Shuraim, Al-Husary, Al-Minshawi, Abdul Basit, Al-Ghamdi, Al-Ajmi, Al-Dosari, Maher Al-Muaiqly) loops ayat straight away. The list is loaded live, with well-known reciters grouped first. Details for the original two:
   - **Idris Abkar**: all 114 surahs. Ayah timings come from mp3quran.net, so looping works straight away.
@@ -53,6 +54,10 @@ js/app.js             router and views: surah list, surah/practice, marking, pro
 js/player.js          segment player and practice sessions (cumulative / single ayah / whole surah)
 js/marker.js          tap-to-mark ayah timings
 js/revision.js        revision scheduler (spaced repetition) and today's plan
+js/recite/            recitation check: engine (rules), mel (spectrogram), worker (model), mic, session, client
+models/tajweed-v2/    speech model (Apache-2.0, see NOTICE.md)
+vendor/onnxruntime-web/  ONNX Runtime Web 1.30 (MIT)
+data/phonetic/        expected pronunciation of every ayah (generated)
 js/api.js             Quran.com and mp3quran.net clients, offline audio
 js/storage.js         localStorage: settings, memorized ayat, timings, backup
 js/ui.js              helpers and icons
