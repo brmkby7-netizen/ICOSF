@@ -230,10 +230,10 @@ function renderSurah() {
           <p class="list-footer plan" id="move-on-plan"></p>
         </div>
         <p class="list-footer plan" id="end-note" hidden></p>
-        <div class="session-choice">
-          <button class="btn wide" id="test-me" type="button">${icons.mic}<span>Test yourself</span></button>
-          <p class="list-footer">Recite the range from memory; the app listens and reveals each word you get right.</p>
-        </div>
+      </div>
+      <div class="session-choice">
+        <button class="btn wide" id="test-me" type="button">${icons.mic}<span>Test yourself</span></button>
+        <p class="list-footer">Recite the range from memory; the app listens and reveals each word you get right.</p>
       </div>
     </section>
 
@@ -266,7 +266,7 @@ function renderSurah() {
   $('#start').addEventListener('click', startRange);
   $('#move-on').addEventListener('click', moveOn);
   $('#test-me').addEventListener('click', () => {
-    rememberRange(readRange());
+    if ($('#from').options.length) rememberRange(readRange());
     location.hash = `#/test/${current.num}`;
   });
 
@@ -1341,7 +1341,7 @@ bar.addEventListener('click', (e) => {
 
 // ---------- settings ----------
 
-const APP_VERSION = '2026.11.20-1';
+const APP_VERSION = '2026.11.20-2';
 
 const selectRow = (name, label, options, value) => `
   <label class="row">
