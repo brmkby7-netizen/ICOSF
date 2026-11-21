@@ -4,8 +4,13 @@
 // `repeats` times. `kind` is 'ayah' (a single ayah on its own), 'link' (several ayat read
 // together) or 'full' (the whole file). The app builds the step list; see buildSteps in app.js.
 //
-// The end of a segment is checked on `timeupdate` (keeps firing with the screen off) and on a
-// short interval (precise while the page is visible).
+// The end of a segment is checked on `timeupdate` (keeps firing with the screen off), on a
+// short interval (precise while the page is visible) and on a timer set for the expected end.
+//
+// Screen off / phone asleep: a phone suspends a page as soon as its audio stops, and a paused
+// page can't start its audio again. So within a session the audio element never pauses: it jumps
+// to the next segment while playing (muted during the jump), and plays muted through the
+// "pause to recite" gaps. It only pauses when you pause, stop, or the session ends.
 
 export class Player {
   constructor() {
@@ -26,6 +31,14 @@ export class Player {
     });
 
     this.audio.addEventListener('timeupdate', () => this._emitTime());
+    // Paused by the system (a phone call, another app's audio, the phone itself): show it as paused,
+    // so the play button (here or on the lock screen) carries on from the same place.
+    this.audio.addEventListener('pause', () => {
+      if (this.selfPaused) { this.selfPaused = false; return; }
+      if (!this.session || this.paused || this.audio.ended) return;
+      this.paused = true;
+      this._emit();
+    });
     this._setupMediaSession();
   }
 
@@ -62,9 +75,19 @@ export class Player {
 
   _emitTime() {
     if (!this.session) return;
-    const t = this.audio.currentTime * 1000;
-    for (const fn of this.timeListeners) fn(t, this.session);
-    this._checkEnd?.();
+    // while muted (a jump or a gap) the position isn't the ayah being recited
+    if (!this.gapping && !this.audio.muted) {
+      const t = this.audio.currentTime * 1000;
+      for (const fn of this.timeListeners) fn(t, this.session);
+    }
+    this._tick?.();
+  }
+
+  // pause the element ourselves (so the 'pause' listener knows it wasn't the system)
+  _pauseAudio() {
+    if (this.audio.paused) return;
+    this.selfPaused = true;
+    this.audio.pause();
   }
 
   setRate(rate) {
@@ -90,14 +113,14 @@ export class Player {
   pause() {
     if (!this.session || this.paused) return;
     this.paused = true;
-    this.audio.pause();
+    this._pauseAudio();
     this._emit();
   }
 
   resume() {
     if (!this.session || !this.paused) return;
     this.paused = false;
-    if (this.inSegment) this.audio.play().catch((e) => this._fail(playError(e)));
+    if (this.inSegment || this.gapping) this.audio.play().catch((e) => this._fail(playError(e)));
     this._emit();
   }
 
@@ -122,12 +145,13 @@ export class Player {
 
   stop(emit = true) {
     this.token++;
-    this.audio.pause();
+    this._pauseAudio();
+    this.audio.muted = false;
     this.session = null;
     this.paused = false;
     this.gapping = false;
     this.inSegment = false;
-    this._checkEnd = null;
+    this._tick = null;
     if (emit) this._emit();
   }
 
@@ -139,7 +163,9 @@ export class Player {
   _finish() {
     const { count, meta } = this.snapshot();
     this.token++;
-    this.audio.pause();
+    this._pauseAudio();
+    this.audio.muted = false;
+    this._tick = null;
     this.session = null;
     this.paused = false;
     this.gapping = false;
@@ -172,9 +198,10 @@ export class Player {
       else { this._finish(); return; }
 
       if (s.gap > 0) {
+        const nx = s.steps[s.i];
         this.gapping = true;
         this._emit();
-        await this._sleep(s.gap * 1000, token);
+        await this._gap(nx.kind === 'full' ? 0 : s.timings[nx.from].start, s.gap * 1000, token);
         if (token !== this.token) return;
       }
     }
@@ -183,33 +210,83 @@ export class Player {
   async _segment(startMs, endMs, token) {
     const a = this.audio;
     a.playbackRate = this.rate;
-    await this._seek(startMs / 1000);
+    // jump to the start, silently, while the element keeps playing
+    if (a.paused || Math.abs(a.currentTime * 1000 - startMs) > 120) {
+      a.muted = true;
+      await this._seek(startMs / 1000);
+    }
     if (token !== this.token) return false;
+    // never let the file run to its end inside a session: an ended element stops like a paused one
+    if (Number.isFinite(endMs) && a.duration > 1) endMs = Math.min(endMs, a.duration * 1000 - 350);
 
     this.inSegment = true;
+    let endTimer = 0;
     const done = new Promise((resolve) => {
       const finish = (ok) => {
         clearInterval(timer);
+        clearTimeout(endTimer);
         a.removeEventListener('ended', onEnded);
-        this._checkEnd = null;
+        this._tick = null;
         this.inSegment = false;
         resolve(ok);
       };
       const check = () => {
         if (token !== this.token) return finish(false);
-        if (a.currentTime * 1000 >= endMs - 30) {
-          a.pause();
+        const left = endMs - a.currentTime * 1000;
+        if (left <= 30) {
+          // keep playing, muted, into whatever comes next: a jump or a gap (the end of a session pauses)
+          a.muted = true;
           finish(true);
+          return;
+        }
+        // with the screen off, timeupdate comes only every quarter second: aim a timer at the end
+        if (!this.paused && left < 700) {
+          clearTimeout(endTimer);
+          endTimer = setTimeout(check, Math.max(0, left / this.rate - 15));
         }
       };
-      const onEnded = () => { if (token === this.token) finish(true); else finish(false); };
+      const onEnded = () => finish(token === this.token);
       const timer = setInterval(check, 40);
       a.addEventListener('ended', onEnded);
-      this._checkEnd = check;
+      this._tick = check;
     });
 
-    if (!this.paused) await a.play();
+    a.muted = false;
+    if (!this.paused && a.paused) await a.play();
     return done;
+  }
+
+  // "Pause to recite": silence for `ms`, with the element still playing (muted) so the phone keeps the
+  // app running with the screen off. It starts early enough to reach the next segment as the pause ends.
+  async _gap(nextStartMs, ms, token) {
+    const a = this.audio;
+    a.muted = true;
+    await this._seek(Math.max(0, nextStartMs - ms * this.rate) / 1000);
+    if (token !== this.token) return;
+    if (!this.paused && a.paused) a.play().catch(() => {});
+    await this._wait(ms, token);
+  }
+
+  // Wall-clock wait that doesn't count paused time; checked on a timer and on timeupdate (screen off).
+  _wait(ms, token) {
+    return new Promise((resolve) => {
+      let left = ms;
+      let last = performance.now();
+      const check = () => {
+        const now = performance.now();
+        if (!this.paused) left -= now - last;
+        last = now;
+        if (token !== this.token || left <= 0) {
+          clearInterval(timer);
+          clearTimeout(t2);
+          if (this._tick === check) this._tick = null;
+          resolve();
+        }
+      };
+      const timer = setInterval(check, 100);
+      const t2 = setTimeout(check, ms + 5);
+      this._tick = check;
+    });
   }
 
   _seek(sec) {
@@ -232,22 +309,6 @@ export class Player {
       a.addEventListener('error', done, { once: true });
       if (a.readyState >= 1) go();
       else a.addEventListener('loadedmetadata', go, { once: true });
-    });
-  }
-
-  _sleep(ms, token) {
-    return new Promise((resolve) => {
-      let left = ms;
-      let last = performance.now();
-      const timer = setInterval(() => {
-        const now = performance.now();
-        if (!this.paused) left -= now - last;
-        last = now;
-        if (token !== this.token || left <= 0) {
-          clearInterval(timer);
-          resolve();
-        }
-      }, 100);
     });
   }
 

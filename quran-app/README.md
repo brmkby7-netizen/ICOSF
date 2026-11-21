@@ -30,6 +30,7 @@ A small installable web app (PWA) for memorizing the Quran ayah by ayah. You can
 - **Progress**: mark single ayat or whole surahs as memorized, and see your totals by surah and by juz.
 - **Offline**: the app itself, plus any Quran text and timings you've already opened, are cached for offline use. You can also save a surah's audio for offline playback.
 - **Apple-style interface**: the system font, large titles that collapse into a translucent top bar, a bottom tab bar (Today, Surahs, Progress, Settings), grouped inset lists, iOS switches, a floating mini player and bottom sheets.
+- **Keeps going when the phone sleeps**: within a session the audio never stops between repeats. It jumps silently from ayah to ayah and plays muted through the "pause to recite" gaps, because a phone suspends a page whose audio has stopped. If something else interrupts it (a call, another app), it shows as paused and Play (in the app or on the lock screen) carries on from the same place. **Keep screen on** (Settings, on by default) stops the phone from sleeping while a session plays or Test yourself is listening.
 - Light and dark mode, playback speed, lock-screen media controls, and backup export/import (Settings).
 
 ## Running it

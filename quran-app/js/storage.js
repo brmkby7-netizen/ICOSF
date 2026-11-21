@@ -28,6 +28,7 @@ const DEFAULTS = {
   showTranslation: true,
   tajweed: true,
   autoscroll: true,
+  keepAwake: true,
   theme: 'auto',
   repeats: 3,
   linkRepeats: 2,

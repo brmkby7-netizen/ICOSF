@@ -982,6 +982,7 @@ async function testView(n) {
       e.target.textContent = 'Added to your revision';
     });
     testSession = null;
+    updateWakeLock();
   };
 
   $('#mic').addEventListener('click', async () => {
@@ -1001,6 +1002,7 @@ async function testView(n) {
     });
     try {
       await testSession.start();
+      updateWakeLock();
       document.body.classList.add('listening');
       $('#mic').innerHTML = icons.stop;
       $('#mic').setAttribute('aria-label', 'Stop');
@@ -1014,6 +1016,7 @@ async function testView(n) {
   cleanup = () => {
     document.body.classList.remove('has-mic', 'listening');
     if (testSession) { testSession.stop(); testSession = null; }
+    updateWakeLock();
   };
 }
 
@@ -1484,6 +1487,38 @@ async function progressView() {
       : `<div class="empty"><p class="muted">Nothing marked yet. Open a surah and tap ✓ next to each ayah you’ve memorized.</p><a class="btn" href="#/">Browse surahs</a></div>`}`;
 }
 
+// ---------- keep the screen on while practising ----------
+
+let wakeLock = null;
+let wakeBusy = false;
+const wantAwake = () => settings.keepAwake && document.visibilityState === 'visible' && ((player.session && !player.paused) || !!testSession);
+
+async function updateWakeLock() {
+  if (!('wakeLock' in navigator) || wakeBusy) return;
+  wakeBusy = true;
+  let failed = false;
+  try {
+    if (wantAwake() && !wakeLock) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!wantAwake() && wakeLock) {
+      const w = wakeLock;
+      wakeLock = null;
+      await w.release();
+    }
+  } catch {
+    wakeLock = null; // not allowed right now (low power mode, page hidden): the phone sleeps as usual
+    failed = true;
+  } finally {
+    wakeBusy = false;
+  }
+  // the state may have changed while the request was pending
+  if (!failed && !!wakeLock !== !!wantAwake()) setTimeout(updateWakeLock, 0);
+}
+player.onState(updateWakeLock);
+// the system drops the lock when the app is hidden; take it again on return
+document.addEventListener('visibilitychange', updateWakeLock);
+
 // ---------- player bar ----------
 
 player.onState((s) => {
@@ -1570,7 +1605,7 @@ bar.addEventListener('click', (e) => {
 
 // ---------- settings ----------
 
-const APP_VERSION = '2026.11.21-1';
+const APP_VERSION = '2026.11.21-2';
 
 const selectRow = (name, label, options, value) => `
   <label class="row">
@@ -1600,7 +1635,9 @@ function settingsView() {
       <h2 class="list-header">Playback</h2>
       <div class="list">
         ${selectRow('speed', 'Speed', [['0.75', '0.75×'], ['0.9', '0.9×'], ['1', 'Normal'], ['1.15', '1.15×'], ['1.25', '1.25×']], settings.speed)}
+        ${switchRow('keepAwake', 'Keep screen on', settings.keepAwake)}
       </div>
+      <p class="list-footer">“Keep screen on” stops the phone from going to sleep while a session is playing or Test yourself is listening. If you lock the phone, the recitation keeps playing, but Test yourself can’t listen with the screen off.</p>
 
       <h2 class="list-header">Revision</h2>
       <div class="list">
@@ -1650,6 +1687,7 @@ function settingsView() {
       showTranslation: form.showTranslation.checked,
       tajweed: form.tajweed.checked,
       autoscroll: form.autoscroll.checked,
+      keepAwake: form.keepAwake.checked,
       speed: Number(form.speed.value),
       reviewCap: Number(form.reviewCap.value),
       maxGap: Number(form.maxGap.value),
