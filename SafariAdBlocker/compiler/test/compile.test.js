@@ -185,3 +185,13 @@ test('unsupported options are skipped, not approximated', () => {
   const c = compile([{ id: 't', text: '||x.test^$csp=script-src none\n||y.test^$removeparam=utm\n||z.test^$redirect-rule=noopjs' }]);
   assert.equal(c.stats.contentBlockerRules, 0);
 });
+
+test('huge lists compile and overflow into other content blockers', () => {
+  // Regression: push(...rules) threw RangeError beyond ~100k rules.
+  const text = Array.from({ length: 250000 }, (_, i) => `||ad${i}.example^`).join('\n');
+  const out = build([{ id: 'big', text, category: 'ads' }]);
+  const totals = Object.values(out.report.distribution.slots).map((s) => s.total);
+  assert.ok(totals.every((t) => t <= 150000));
+  assert.equal(totals.reduce((a, b) => a + b, 0), 250000);
+  assert.equal(out.report.distribution.dropped, 0);
+});

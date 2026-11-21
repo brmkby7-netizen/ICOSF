@@ -9,6 +9,12 @@ import { SECTION_ORDER, isExceptionSection, CATEGORIES } from './compile.js';
 
 export const SAFARI_RULE_LIMIT = 150000;
 
+// Array.prototype.push(...xs) throws RangeError once xs has ~100k+ items
+// (engine argument limits), which real filter lists reach.
+function append(target, items) {
+  for (let i = 0; i < items.length; i++) target.push(items[i]);
+}
+
 export const DEFAULT_SLOTS = [
   { id: 'ads', categories: ['ads'] },
   { id: 'privacy', categories: ['privacy', 'security'] },
@@ -50,15 +56,15 @@ export function distribute(compiled, options = {}) {
     if (!bucket) continue;
     const target = catToSlot[c] || fallbackSlot;
     for (const s of SECTION_ORDER) {
-      if (isExceptionSection(s)) exceptionsBySection[s].push(...bucket[s]);
-      else slotBlocks[target][s].push(...bucket[s]);
+      if (isExceptionSection(s)) append(exceptionsBySection[s], bucket[s]);
+      else append(slotBlocks[target][s], bucket[s]);
     }
   }
   const shared = compiled.shared || {};
   for (const s of SECTION_ORDER) {
     const rules = shared[s] || [];
-    if (isExceptionSection(s)) exceptionsBySection[s].push(...rules);
-    else for (const slot of slots) slotBlocks[slot.id][s].push(...rules);
+    if (isExceptionSection(s)) append(exceptionsBySection[s], rules);
+    else for (const slot of slots) append(slotBlocks[slot.id][s], rules);
   }
 
   const dedupe = (rules) => {
@@ -104,7 +110,7 @@ export function distribute(compiled, options = {}) {
         const n = Math.min(over, slotBlocks[slot.id][section].length, target ? Math.max(0, target.room) : 0);
         if (n <= 0) break;
         const moved = slotBlocks[slot.id][section].splice(slotBlocks[slot.id][section].length - n, n);
-        slotBlocks[target.id][section].push(...moved);
+        append(slotBlocks[target.id][section], moved);
         over -= n;
       }
     }
@@ -129,7 +135,7 @@ export function distribute(compiled, options = {}) {
       else if (COSMETIC_EXCEPTIONS.has(s)) part = hasCosmetic(slot.id) ? exceptionsBySection[s] : [];
       else part = hasNetwork(slot.id) ? exceptionsBySection[s] : [];
       counts[s] = part.length;
-      rules.push(...part);
+      append(rules, part);
     }
     out[slot.id] = rules;
     report.slots[slot.id] = { total: rules.length, sections: counts };
