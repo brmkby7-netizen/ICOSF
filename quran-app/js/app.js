@@ -6,6 +6,7 @@ import * as revision from './revision.js';
 import * as recite from './recite/client.js';
 import { ReciteSession } from './recite/session.js';
 import { ayahRef } from './recite/engine.js';
+import * as context from './context.js';
 import { $, esc, arNum, fmtDuration, maxContiguous, toast, icons } from './ui.js';
 
 const TOTAL_AYAT = 6236;
@@ -183,6 +184,8 @@ function selectOptions(max, selected) {
 
 function renderSurah() {
   const { num, chapter, verses } = current;
+  ctxKey = '';
+  movedTo = 0;
   const mem = store.getMemorizedSet(num);
   const plan = store.getPlan(num);
   const from = plan ? plan.from : 1;
@@ -209,7 +212,9 @@ function renderSurah() {
         <div class="list">
           <label class="row"><span class="row-label">From ayah</span><select id="from" class="row-select" data-v="${from}"></select></label>
           <label class="row"><span class="row-label">To ayah</span><select id="to" class="row-select" data-v="${to}"></select></label>
+          <label class="row" id="page-row" hidden><span class="row-label">Mushaf page</span><select id="page" class="row-select" aria-label="Mushaf page"></select></label>
         </div>
+        <section class="ctx" id="ctx" aria-label="Understand before you memorize"></section>
         <div class="list">
           <label class="row"><span class="row-label">Each ayah</span>
             <select id="repeats" class="row-select">${countOptions(settings.repeats)}</select>
@@ -228,6 +233,7 @@ function renderSurah() {
         <div class="session-choice" id="move-on-box" hidden>
           <button class="btn wide move-on" id="move-on" type="button"><span id="move-on-label"></span>${icons.next}</button>
           <p class="list-footer plan" id="move-on-plan"></p>
+          <p class="list-footer move-on-meaning" id="move-on-meaning"></p>
         </div>
         <p class="list-footer plan" id="end-note" hidden></p>
       </div>
@@ -263,6 +269,15 @@ function renderSurah() {
   });
 
   for (const id of ['from', 'to', 'repeats', 'link', 'gap']) $(`#${id}`).addEventListener('change', updatePlan);
+  $('#page').addEventListener('change', (e) => {
+    const pg = current.pages?.find((x) => String(x.page) === e.target.value);
+    if (!pg) return;
+    const max = $('#to').options.length;
+    $('#from').value = String(pg.from);
+    $('#to').value = String(Math.min(pg.to, max));
+    updatePlan();
+  });
+  $('#ctx').addEventListener('click', onContextClick);
   $('#start').addEventListener('click', startRange);
   $('#move-on').addEventListener('click', moveOn);
   $('#test-me').addEventListener('click', () => {
@@ -439,6 +454,7 @@ async function loadAudioState() {
   fillRangeSelects(marked);
   controls.hidden = false;
   updatePlan();
+  fillPageSelect(marked);
 }
 
 function fillRangeSelects(max) {
@@ -520,7 +536,11 @@ function updatePlan() {
     const next = moveOnSteps(r);
     $('#move-on-label').textContent = `Move on: ayat ${span(r.from + 1, r.to + 1)}`;
     $('#move-on-plan').textContent = `New ayah ${r.to + 1} ×${r.repeats}, then ${span(r.from + 1, r.to + 1)} together ×${r.link} · ${fmtDuration(stepsDuration(next, r.gap))}`;
+    showMeaningOf(r.to + 1, $('#move-on-meaning'));
   }
+  if (movedTo && movedTo !== r.to) movedTo = 0;
+  syncPage(r);
+  updateContext(r);
   const atEnd = started && r.to >= current.verses.length;
   const end = $('#end-note');
   end.hidden = !(started && r.to >= max);
@@ -561,8 +581,187 @@ async function moveOn() {
     toast(`Ayah ${r.from} moved to your revision. It comes back later today.`);
   }
   rememberRange(next);
+  movedTo = next.to;
   updatePlan();
   await startSession({ steps: moveOnSteps(r), gap: r.gap, title: `ayat ${span(next.from, next.to)}`, range: true });
+}
+
+// ---------- understand before you memorize (classical tafsir) ----------
+
+let ctxKey = '';     // surah:from-to shown in the context card
+let ctxReq = 0;
+let movedTo = 0;     // the ayah just added by Move on (shown first in the card)
+let ctxData = null;  // { range, data } behind the card, for the tafsir sheet
+
+const ctxHead = (r) => `<h2 class="list-header">Before you memorize · ${r.from === r.to ? `ayah ${r.from}` : `ayat ${span(r.from, r.to)}`}</h2>`;
+const ctxSource = '<p class="list-footer">Classical tafsir: Ibn Kathir (Abridged) and Tazkirul Quran by Maulana Wahiduddin Khan, via Quran.com.</p>';
+
+async function updateContext(r) {
+  const box = $('#ctx');
+  if (!box || !current) return;
+  const key = `${current.num}:${r.from}-${r.to}:${movedTo}`;
+  if (key === ctxKey) return;
+  ctxKey = key;
+  const req = ++ctxReq;
+  const num = current.num;
+  if (!box.firstChild) box.innerHTML = `${ctxHead(r)}<div class="list"><div class="ctx-block">${loading('Loading the tafsir…')}</div></div>`;
+  let data;
+  try {
+    data = await context.forRange(num, current.verses, r.from, r.to);
+  } catch {
+    data = null;
+  }
+  if (req !== ctxReq || current?.num !== num || !$('#ctx')) return;
+  if (!data || !data.available) {
+    box.innerHTML = `${ctxHead(r)}<div class="list"><div class="ctx-block muted">The tafsir couldn’t be loaded. Check your connection; once it has loaded it stays available offline.</div></div>`;
+    return;
+  }
+  ctxData = { range: { from: r.from, to: r.to }, data };
+  box.innerHTML = ctxHead(r) + `<div class="list">${contextRows(r, data)}</div>` + ctxSource;
+  requestAnimationFrame(() => {
+    for (const more of box.querySelectorAll('[data-more]')) {
+      const el = more.previousElementSibling;
+      more.hidden = !el || el.scrollHeight <= el.clientHeight + 2;
+    }
+  });
+}
+
+// Sections that cover the same ayat are shown as one step of the flow
+function flowSteps(sections) {
+  const steps = [];
+  sections.forEach((s, i) => {
+    if (!s.title) return;
+    const last = steps[steps.length - 1];
+    if (last && last.from === s.from && last.to === s.to) last.titles.push(s.title);
+    else steps.push({ from: s.from, to: s.to, titles: [s.title], index: i });
+  });
+  return steps;
+}
+
+const clampText = (text, cls = '') => `<p class="ctx-text clamp ${cls}">${esc(text)}</p><button class="link ctx-more" type="button" data-more>More</button>`;
+
+function contextRows(r, data) {
+  const rows = [];
+  if (movedTo && movedTo === r.to) {
+    const v = current.verses[movedTo - 1];
+    const sec = data.sections.find((s) => s.from === movedTo && s.title);
+    rows.push(`<div class="ctx-block ctx-new">
+      <p class="ctx-label">New ayah ${movedTo}</p>
+      ${sec ? `<p class="ctx-section">Starts a new section: ${esc(sec.title)}</p>` : ''}
+      <p class="ctx-text">${esc(v?.translation || '')}</p>
+    </div>`);
+  }
+  const steps = flowSteps(data.sections);
+  if (steps.length) {
+    rows.push(`<div class="ctx-block">
+      <p class="ctx-label">Flow of the passage</p>
+      <ol class="ctx-flow">${steps.map((st) => `
+        <li><button type="button" class="ctx-step" data-sec="${st.index}">
+          <span class="ctx-range">${span(Math.max(st.from, 1), st.to)}</span>
+          <span class="ctx-step-title">${st.titles.map(esc).join('<span class="sep"> · </span>')}</span>
+        </button></li>`).join('')}
+      </ol>
+    </div>`);
+  }
+  if (data.stories.length) {
+    const st = data.stories[0];
+    rows.push(`<div class="ctx-block">
+      <p class="ctx-label">Story and reason for revelation</p>
+      ${st.title ? `<p class="ctx-section">${esc(st.title)} <span class="muted">· ${st.from === st.to ? `ayah ${st.from}` : `ayat ${span(st.from, st.to)}`}</span></p>` : ''}
+      ${clampText(st.text)}
+    </div>`);
+  }
+  if (data.brief.length) {
+    rows.push(`<div class="ctx-block">
+      <p class="ctx-label">In brief <span class="muted">· Tazkirul Quran</span></p>
+      <div class="clamp-box">${data.brief.map((g) => `<p class="ctx-text"><span class="ctx-range">${span(g.from, g.to)}</span> ${esc(g.text)}</p>`).join('')}</div>
+      <button class="link ctx-more" type="button" data-more>More</button>
+    </div>`);
+  }
+  if (data.intro.length) rows.push(`<button class="row chev" type="button" data-read="intro"><span class="row-label">About this surah</span><span class="row-value">Ibn Kathir</span></button>`);
+  if (data.sections.length) rows.push(`<button class="row chev" type="button" data-read="tafsir"><span class="row-label row-action">Read the tafsir</span><span class="row-value">Ibn Kathir</span></button>`);
+  return rows.join('');
+}
+
+function onContextClick(e) {
+  const more = e.target.closest('[data-more]');
+  if (more) {
+    const block = more.closest('.ctx-block');
+    const open = block.classList.toggle('open');
+    more.textContent = open ? 'Less' : 'More';
+    return;
+  }
+  const step = e.target.closest('[data-sec]');
+  if (step) { openTafsir('tafsir', Number(step.dataset.sec)); return; }
+  const read = e.target.closest('[data-read]');
+  if (read) openTafsir(read.dataset.read);
+}
+
+const tafsirDlg = $('#tafsir');
+
+function blocksHtml(blocks) {
+  return blocks.map((b) => (b.type === 'h'
+    ? `<h4>${esc(b.text)}</h4>`
+    : b.arabic ? `<p class="ar tf-ar" lang="ar" dir="rtl">${esc(b.text)}</p>` : `<p>${esc(b.text)}</p>`)).join('');
+}
+
+function openTafsir(which, sectionIndex = -1) {
+  if (!ctxData) return;
+  const { range, data } = ctxData;
+  const name = current.chapter.name_simple;
+  if (which === 'intro') {
+    $('#tafsir-title').textContent = `About ${name}`;
+    $('#tafsir-body').innerHTML = `<p class="muted small">Ibn Kathir (Abridged), via Quran.com</p>${blocksHtml(data.intro)}`;
+  } else {
+    $('#tafsir-title').textContent = `${name} ${span(range.from, range.to)}`;
+    $('#tafsir-body').innerHTML = `<p class="muted small">Ibn Kathir (Abridged), via Quran.com</p>` + data.sections.map((s, i) => `
+      <section class="tf-sec" id="tf-${i}">
+        <h3><span class="ctx-range">${span(s.from, s.to)}</span> ${esc(s.title || (s.from === s.to ? `Ayah ${s.from}` : `Ayat ${span(s.from, s.to)}`))}</h3>
+        ${blocksHtml(s.blocks)}
+      </section>`).join('');
+  }
+  tafsirDlg.showModal();
+  const target = sectionIndex >= 0 && $(`#tf-${sectionIndex}`);
+  if (target) target.scrollIntoView({ block: 'start' });
+  else tafsirDlg.scrollTop = 0;
+}
+
+// The meaning of one ayah (Saheeh International), with the Ibn Kathir section it opens, if any
+function showMeaningOf(n, el, surah = current?.num, verses = current?.verses) {
+  const v = verses?.[n - 1];
+  if (!el || !v) return;
+  el.dataset.n = String(n);
+  el.innerHTML = `<strong>Ayah ${n}:</strong> ${esc(v.translation)}`;
+  context.sectionOf(surah, verses, n).then((s) => {
+    if (!s || s.from !== n || !s.title || el.dataset.n !== String(n) || !el.isConnected) return;
+    el.insertAdjacentHTML('afterbegin', `<span class="meaning-section">New section: ${esc(s.title)}</span>`);
+  });
+}
+
+// ---------- pick by Mushaf page ----------
+
+async function fillPageSelect(max) {
+  const num = current.num;
+  let list;
+  try { list = await context.pages(num); } catch { return; }
+  if (current?.num !== num || !$('#page')) return;
+  current.pages = list;
+  $('#page').innerHTML = `<option value="" id="page-none"></option>` + list.map((pg) => `
+    <option value="${pg.page}" ${pg.from > max ? 'disabled' : ''}>Page ${pg.page} · ${pg.from === Math.min(pg.to, max) ? `ayah ${pg.from}` : `ayat ${span(pg.from, Math.min(pg.to, max))}`}</option>`).join('');
+  $('#page-row').hidden = false;
+  syncPage(readRange());
+}
+
+// Show the page the range is on; select it when the range is exactly that page
+function syncPage(r) {
+  const sel = $('#page');
+  if (!sel || !current.pages) return;
+  const max = $('#to').options.length;
+  const hit = current.pages.find((pg) => pg.from === r.from && Math.min(pg.to, max) === r.to);
+  const on = current.pages.filter((pg) => pg.from <= r.to && pg.to >= r.from).map((pg) => pg.page);
+  const none = $('#page-none');
+  if (none) none.textContent = on.length > 1 ? `Pages ${on[0]}–${on.at(-1)}` : on.length ? `On page ${on[0]}` : 'Choose';
+  sel.value = hit ? String(hit.page) : '';
 }
 
 async function playOne(n) {
@@ -700,18 +899,31 @@ async function testView(n) {
       ${range.map((v, i) => `
         <article class="t-ayah${i === 0 ? ' current' : ''}" data-i="${i}">
           <p class="ar t-words" lang="ar" dir="rtl">${displayWords(v).map((w, k) => `<span class="w w-pending" data-k="${k}">${esc(w)}</span>`).join(' ')} <span class="ayah-end">${arNum(v.n)}</span></p>
+          <p class="t-meaning" hidden></p>
           <p class="t-note" hidden></p>
         </article>`).join('')}
     </div>
     <div class="mic-dock">
       <button class="mic-btn" id="mic" type="button" aria-label="Start reciting">${icons.mic}</button>
-      <span class="mic-status" id="mic-status">Preparing…</span>
+      <div class="mic-row">
+        <span class="mic-status" id="mic-status">Preparing…</span>
+        <button class="hint-chip" id="t-hint" type="button">Meaning</button>
+      </div>
     </div>`;
   document.body.classList.add('has-mic');
 
   const ayat = range.map((v) => ({ ref: ayahRef(phon.ayat[v.n - 1], phon.kinds, phon.rules), verse: v }));
   const status = (t) => { const el = $('#mic-status'); if (el) el.textContent = t; };
   const lastNotes = new Map(); // "i:k" → notes, for tap-to-explain
+
+  // a hint while reciting: the meaning of the ayah you're on
+  $('#t-hint').addEventListener('click', () => {
+    const art = view.querySelector('.t-ayah.current') || view.querySelector('.t-ayah');
+    if (!art) return;
+    const el = art.querySelector('.t-meaning');
+    showMeaningOf(range[Number(art.dataset.i)].n, el, n, verses);
+    el.hidden = false;
+  });
 
   try {
     await recite.initModel();
@@ -733,6 +945,7 @@ async function testView(n) {
     });
   };
   const setCurrent = (i) => view.querySelectorAll('.t-ayah').forEach((el) => el.classList.toggle('current', Number(el.dataset.i) === i));
+
 
   $('#t-list').addEventListener('click', (e) => {
     const el = e.target.closest('.w');
@@ -775,7 +988,7 @@ async function testView(n) {
     if (testSession) { status('Checking…'); finish(await testSession.stop()); return; }
     // fresh start
     view.querySelectorAll('.w').forEach((el) => { el.className = 'w w-pending'; });
-    view.querySelectorAll('.t-note').forEach((el) => { el.hidden = true; });
+    view.querySelectorAll('.t-note, .t-meaning').forEach((el) => { el.hidden = true; });
     lastNotes.clear();
     $('#test-summary').innerHTML = '';
     setCurrent(0);
@@ -1102,10 +1315,12 @@ async function reviewView() {
 
     <div class="review-tools">
       <button class="btn ghost small-btn" id="hint" type="button">First word</button>
+      <button class="btn ghost small-btn" id="hint-meaning" type="button">Meaning</button>
       <button class="btn ghost small-btn" id="listen" type="button" disabled>${icons.play}<span>Listen</span></button>
       <button class="btn primary small-btn" id="reveal" type="button">Reveal</button>
     </div>
     <p class="hint ar" lang="ar" dir="rtl" id="hint-text" hidden>${esc(firstWord)} …</p>
+    <div class="card meaning-hint" id="meaning-text" hidden></div>
 
     <div class="review-ayat hidden-text" id="review-ayat">
       ${verses.map((v) => `
@@ -1128,12 +1343,26 @@ async function reviewView() {
 
   const box = $('#review-ayat');
   $('#hint').addEventListener('click', () => { $('#hint-text').hidden = false; });
+  $('#hint-meaning').addEventListener('click', async () => {
+    const box = $('#meaning-text');
+    box.hidden = false;
+    const v = verses[0];
+    box.innerHTML = `<p><strong>${p.from === p.to ? `Ayah ${v.n}` : `Starts with ayah ${v.n}`}:</strong> ${esc(v.translation)}</p>`;
+    // the flow of the passage (Ibn Kathir's headings), when the tafsir is at hand
+    try {
+      const all = await api.getVerses(p.surah);
+      const data = await context.forRange(p.surah, all, p.from, p.to);
+      const steps = flowSteps(data.sections);
+      if (steps.length && box.isConnected) box.insertAdjacentHTML('beforeend', `<p class="ctx-label">Flow</p><ol class="ctx-flow plain">${steps.map((st) => `<li><span class="ctx-range">${span(st.from, st.to)}</span> <span>${st.titles.map(esc).join(' · ')}</span></li>`).join('')}</ol>`);
+    } catch { /* offline: the translation is enough */ }
+  });
   $('#reveal').addEventListener('click', () => {
     box.classList.remove('hidden-text');
     for (const b of box.querySelectorAll('.review-ayah')) b.disabled = false;
     $('#reveal').hidden = true;
     $('#hint').hidden = true;
     $('#hint-text').hidden = true;
+    $('#hint-meaning').hidden = true;
     $('#review-help').textContent = 'Check what you recited.';
     $('#grade').hidden = false;
   });
@@ -1341,7 +1570,7 @@ bar.addEventListener('click', (e) => {
 
 // ---------- settings ----------
 
-const APP_VERSION = '2026.11.20-2';
+const APP_VERSION = '2026.11.21-1';
 
 const selectRow = (name, label, options, value) => `
   <label class="row">

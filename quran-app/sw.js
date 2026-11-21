@@ -1,6 +1,6 @@
 // Service worker: app shell + Quran text/translation/timings cached for offline use.
 // Recitation audio is saved separately (on request) by the app in the "qm-audio" cache.
-const VERSION = '2026.11.20-2';
+const VERSION = '2026.11.21-1';
 const SHELL_CACHE = `qm-shell-${VERSION}`;
 const DATA_CACHE = 'qm-data-v1';
 const KEEP = new Set([SHELL_CACHE, DATA_CACHE, 'qm-audio', 'qm-recite']);
@@ -16,6 +16,8 @@ const SHELL = [
   './js/storage.js',
   './js/ui.js',
   './js/revision.js',
+  './js/context.js',
+  './data/pages.json',
   './js/recite/engine.js',
   './js/recite/mel.js',
   './js/recite/mic.js',

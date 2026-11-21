@@ -9,6 +9,15 @@ A small installable web app (PWA) for memorizing the Quran ayah by ayah. You can
   2. Ayah 2 ×3, then 1–2 together ×2
   3. Ayah 3 ×3, then 1–3 together ×2
   4. …and so on, ending with 1–5 together ×2
+- **Understand before you memorize**: under the range you pick, the surah page shows what those ayat are about, from classical tafsir only (nothing AI-written):
+  - **Flow of the passage**: Ibn Kathir's section headings with the ayat each one covers (for example 78:1–5 "Refutation against the Idolators' Denial of the Occurrence of the Day of Judgement", then 6–16 "Mentioning Allah's Power…"). Tap one to read that part of the tafsir.
+  - **Story and reason for revelation**, where Ibn Kathir tells one (for example why Surat Ad-Duha was revealed).
+  - **In brief**: the short explanations from Tazkirul Quran (Maulana Wahiduddin Khan).
+  - **Read the tafsir**: the full Ibn Kathir (Abridged) text for the range, in a sheet, with the Arabic it quotes. **About this surah** shows Ibn Kathir's introduction when the range starts at ayah 1.
+  - **Move on** shows the meaning of the next ayah before you add it, and says when it starts a new section. After moving on, the card leads with the new ayah.
+  - **Meaning hints**: in Test yourself ("Meaning" shows the current ayah's translation) and in revision ("Meaning", next to "First word": the first ayah's translation and the passage's flow).
+  - The texts are loaded from Quran.com when needed (they aren't bundled), and stay available offline once loaded. Ibn Kathir's sections are matched to ayat by the Arabic they quote: 99.9% of ayat fall in a section (surah 105 has no Ibn Kathir text on Quran.com, so only Tazkirul Quran is shown there).
+- **Pick by Mushaf page**: choose a page of the Madinah Mushaf (604 pages) and the range becomes the ayat of this surah on that page. The row also tells you which page your range is on.
 - **Move on**: when you're ready, the range slides forward by one ayah without starting over. You read the new ayah (6) ×3, then the new range (2–6) together ×2. The range is saved per surah, so you can pick up another day. There's an optional pause after each repeat so you can recite.
 - **Today's revision** (spaced repetition): when Move on drops an ayah from the range, it joins your revision automatically. It comes back later that day, the next morning, then after 2, 3 and 7 days, then roughly doubling, but never longer than a maximum gap (30 days by default). Ayat you tick ✓ as already memorized join the long-term rotation; ticking a whole surah spreads it over two weeks. The Today tab lists due passages, old revision first, up to a daily limit, and says when you're behind. Each review: recite from memory (with an optional first-word hint or Listen), reveal, tap any ayah you slipped on (it comes back tomorrow), then grade Forgot / Hard / Good / Easy. Progress shows ayat in revision and weak spots.
 - **Fix an ayah's timing** (any reciter): tap the clock icon next to an ayah to nudge its start or end, listen to check, or play around the ayah and tap "Start is here" / "End is here". Neighbouring edges can move with it; fixes are saved per reciter and can be reset.
@@ -42,6 +51,8 @@ Opening `index.html` directly from disk won't work, because ES modules and the s
 | Surah list, KFGQPC-encoded text (`qpc_hafs`), tajweed markup, translation, juz boundaries | `api.quran.com/api/v4` |
 | Recitation audio (whole-surah MP3s) | `cdn.mp3quran.net` |
 | Reciter surah lists, Idris Abkar ayah timings | `mp3quran.net/api/v3` |
+| Tafsir: Ibn Kathir (Abridged, id 169), Tazkirul Quran (id 817) | `api.quran.com/api/v4/tafsirs/{id}/by_chapter/{surah}` (loaded at runtime) |
+| Madinah Mushaf page of every ayah | `data/pages.json` (from Quran.com's page numbers) |
 
 The audio is one MP3 per surah. Ayah segments are played by seeking to each ayah's start time and stopping at its end time.
 
@@ -54,6 +65,7 @@ js/app.js             router and views: surah list, surah/practice, marking, pro
 js/player.js          segment player and practice sessions (cumulative / single ayah / whole surah)
 js/marker.js          tap-to-mark ayah timings
 js/revision.js        revision scheduler (spaced repetition) and today's plan
+js/context.js         classical tafsir for a range: flow, story, brief, full text; Mushaf pages
 js/recite/            recitation check: engine (rules), mel (spectrogram), worker (model), mic, session, client
 models/tajweed-v2/    speech model (Apache-2.0, see NOTICE.md)
 vendor/onnxruntime-web/  ONNX Runtime Web 1.30 (MIT)
