@@ -8,6 +8,11 @@ on:
     paths: ['SafariAdBlocker/**', '.github/workflows/bastion-ipad.yml']
   workflow_dispatch:
 
+# A newer push makes an in-progress build pointless; save macOS minutes.
+concurrency:
+  group: bastion-ipad-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ipa:
     runs-on: macos-15
