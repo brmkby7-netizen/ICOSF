@@ -15,7 +15,7 @@ settings:
   base:
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
-    SWIFT_VERSION: "5.9"
+    SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     BASTION_APP_BUNDLE_ID: app.bastion.Bastion
@@ -163,3 +163,21 @@ targets:
           mkdir -p "$DEST"
           rsync -a --exclude 'test/' --exclude '.DS_Store' "${PROJECT_DIR}/../extension/" "$DEST/"
         basedOnDependencyAnalysis: false
+
+schemes:
+  Bastion_iOS:
+    build:
+      targets:
+        Bastion_iOS: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  Bastion_macOS:
+    build:
+      targets:
+        Bastion_macOS: all
+    run:
+      config: Debug
+    archive:
+      config: Release

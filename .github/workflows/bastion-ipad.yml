@@ -1,0 +1,65 @@
+# Builds Bastion on GitHub's Macs and publishes an unsigned iPad app
+# (Bastion.ipa) as a downloadable artifact. Install it from a Windows PC or a
+# Mac with Sideloadly, which signs it with your own Apple ID.
+name: Build Bastion for iPad
+
+on:
+  push:
+    paths: ['SafariAdBlocker/**', '.github/workflows/bastion-ipad.yml']
+  workflow_dispatch:
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: SafariAdBlocker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tools
+        run: |
+          brew install xcodegen
+          xcodebuild -version
+      - name: Compile filter lists
+        run: |
+          npm ci || npm install
+          npm run build
+      - name: Generate Xcode project
+        working-directory: SafariAdBlocker/apple
+        run: xcodegen generate
+      - name: Build iPad app (unsigned)
+        working-directory: SafariAdBlocker/apple
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Bastion.xcodeproj \
+            -scheme Bastion_iOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            2>&1 | tee xcodebuild.log | grep -E 'error:|warning: .*\.swift|BUILD (SUCCEEDED|FAILED)|\*\* ' || true
+          grep -q 'BUILD SUCCEEDED' xcodebuild.log
+      - name: Package Bastion.ipa
+        working-directory: SafariAdBlocker/apple/build/Build/Products/Release-iphoneos
+        run: |
+          rm -rf Payload && mkdir Payload
+          cp -R Bastion.app Payload/
+          ls Payload/Bastion.app/PlugIns
+          zip -qry "$GITHUB_WORKSPACE/Bastion.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bastion-ipa
+          path: Bastion.ipa
+          if-no-files-found: error
+      - name: Keep the build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: SafariAdBlocker/apple/xcodebuild.log
+          if-no-files-found: ignore
