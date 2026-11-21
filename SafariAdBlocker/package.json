@@ -1,0 +1,22 @@
+{
+  "name": "bastion-safari-blocker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bastion: a Safari content blocker + web extension with an ABP/uBO/AdGuard filter compiler.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test compiler/test/*.test.js",
+    "test:extension": "node --test extension/test/*.test.js",
+    "fetch-lists": "node scripts/fetch-lists.mjs",
+    "build:compiler": "node scripts/build-compiler.mjs",
+    "build:rules": "node scripts/build-rules.mjs",
+    "build": "npm run build:compiler && npm run build:rules",
+    "inspect": "node scripts/inspect.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

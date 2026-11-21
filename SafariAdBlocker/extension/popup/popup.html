@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bastion</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5 4.5 7v8.2c0 7.2 4.9 12.6 11.5 14.3 6.6-1.7 11.5-7.1 11.5-14.3V7L16 2.5Z" fill="currentColor"/><path d="m10.5 16 3.8 3.8 7.2-7.6" fill="none" stroke="var(--logo-check)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h1>Bastion</h1>
+      <span id="status" class="pill">…</span>
+    </header>
+
+    <section class="site" id="site-card">
+      <div class="site-row">
+        <div class="site-text">
+          <div class="label">Protection on</div>
+          <div id="site" class="domain">—</div>
+        </div>
+        <label class="switch" title="Pause or resume Bastion on this site">
+          <input type="checkbox" id="toggle" role="switch" aria-label="Protection on this site">
+          <span class="track"><span class="thumb"></span></span>
+        </label>
+      </div>
+      <div id="reload-note" class="note" hidden>
+        <span>Reload the page to apply.</span>
+        <button id="reload" class="link">Reload</button>
+      </div>
+    </section>
+
+    <section class="stats" id="stats">
+      <div><span id="hidden" class="num">0</span><span class="cap">elements hidden by advanced filters</span></div>
+    </section>
+
+    <section class="actions">
+      <button id="picker" class="btn primary">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3l5.5 13 1.8-5.2L16.5 9 4 3Z" fill="currentColor"/></svg>
+        Hide an element…
+      </button>
+      <button id="reset" class="btn" hidden>Restore hidden elements</button>
+    </section>
+
+    <p id="unsupported" class="muted" hidden>Bastion doesn't run on this page.</p>
+    <footer class="muted">Filter lists and the allowlist are managed in the Bastion app.</footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

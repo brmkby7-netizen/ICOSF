@@ -1,0 +1,4 @@
+{
+  "extension_name": { "message": "Bastion Advanced Blocking", "description": "Name shown in Safari's extension list." },
+  "extension_description": { "message": "Scriptlets, advanced cosmetic filters, an element picker and per-site pause for Bastion's content blockers.", "description": "Description shown in Safari's extension list." }
+}

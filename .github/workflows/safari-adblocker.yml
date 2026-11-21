@@ -1,0 +1,38 @@
+name: Safari ad blocker
+
+on:
+  push:
+    paths: ['SafariAdBlocker/**', '.github/workflows/safari-adblocker.yml']
+  pull_request:
+    paths: ['SafariAdBlocker/**', '.github/workflows/safari-adblocker.yml']
+
+defaults:
+  run:
+    working-directory: SafariAdBlocker
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci || npm install
+      - name: Compiler tests
+        run: npm test
+      - name: Fetch real filter lists
+        run: npm run fetch-lists -- --default
+      - name: Validate compiled real lists
+        run: npm test
+      - name: Build bundled rules
+        run: npm run build
+      - name: Extension tests (headless Chromium)
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          npm run test:extension
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-report
+          path: SafariAdBlocker/build/report.json

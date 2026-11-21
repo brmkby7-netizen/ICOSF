@@ -1,0 +1,308 @@
+{
+  "version": 1,
+  "comment": "Filter lists Bastion offers. `category` picks the Safari content blocker a list's rules go to (rules can override it with !#safari_cb_affinity). `trusted` lists may use trusted-* scriptlets. `default` lists are enabled on first launch and bundled into the app.",
+  "lists": [
+    {
+      "id": "easylist",
+      "name": "EasyList",
+      "description": "The primary ad-blocking list.",
+      "category": "ads",
+      "url": "https://easylist.to/easylist/easylist.txt",
+      "homepage": "https://easylist.to/",
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "ubo-filters",
+      "name": "uBlock filters",
+      "description": "uBlock Origin's own ad, anti-adblock and YouTube fixes.",
+      "category": "ads",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters.txt",
+      "mirrors": ["https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt"],
+      "homepage": "https://github.com/uBlockOrigin/uAssets",
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "ubo-quick-fixes",
+      "name": "uBlock filters – Quick fixes",
+      "description": "Fast-moving fixes, including video ads.",
+      "category": "ads",
+      "url": "https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt",
+      "mirrors": ["https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt"],
+      "homepage": "https://github.com/uBlockOrigin/uAssets",
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "ubo-unbreak",
+      "name": "uBlock filters – Unbreak",
+      "description": "Exceptions that fix sites broken by other lists.",
+      "category": "ads",
+      "url": "https://ublockorigin.github.io/uAssets/filters/unbreak.txt",
+      "mirrors": ["https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt"],
+      "homepage": "https://github.com/uBlockOrigin/uAssets",
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "adguard-base",
+      "name": "AdGuard Base",
+      "description": "AdGuard's main ad filter (overlaps with EasyList).",
+      "category": "ads",
+      "url": "https://filters.adtidy.org/extension/safari/filters/2.txt",
+      "mirrors": ["https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_2_Base/filter.txt"],
+      "homepage": "https://adguard.com/kb/general/ad-filtering/adguard-filters/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "adguard-mobile",
+      "name": "AdGuard Mobile Ads",
+      "description": "Ads on mobile websites.",
+      "category": "ads",
+      "url": "https://filters.adtidy.org/extension/safari/filters/11.txt",
+      "mirrors": ["https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_11_Mobile/filter.txt"],
+      "homepage": "https://adguard.com/kb/general/ad-filtering/adguard-filters/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "easyprivacy",
+      "name": "EasyPrivacy",
+      "description": "Blocks trackers, analytics and fingerprinting scripts.",
+      "category": "privacy",
+      "url": "https://easylist.to/easylist/easyprivacy.txt",
+      "homepage": "https://easylist.to/",
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "ubo-privacy",
+      "name": "uBlock filters – Privacy",
+      "description": "Additional tracker blocking from uBlock Origin.",
+      "category": "privacy",
+      "url": "https://ublockorigin.github.io/uAssets/filters/privacy.txt",
+      "mirrors": ["https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt"],
+      "homepage": "https://github.com/uBlockOrigin/uAssets",
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "peter-lowe",
+      "name": "Peter Lowe's Ad and tracking server list",
+      "description": "A compact hosts list of ad and tracking servers.",
+      "category": "privacy",
+      "url": "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext",
+      "homepage": "https://pgl.yoyo.org/adservers/",
+      "default": true,
+      "trusted": false
+    },
+    {
+      "id": "adguard-tracking",
+      "name": "AdGuard Tracking Protection",
+      "description": "Very large tracker list, including tracking pixels.",
+      "category": "privacy",
+      "url": "https://filters.adtidy.org/extension/safari/filters/3.txt",
+      "mirrors": ["https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_3_Spyware/filter.txt"],
+      "homepage": "https://adguard.com/kb/general/ad-filtering/adguard-filters/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "ubo-badware",
+      "name": "uBlock filters – Badware risks",
+      "description": "Scam, fake-download and malware sites.",
+      "category": "security",
+      "url": "https://ublockorigin.github.io/uAssets/filters/badware.txt",
+      "mirrors": ["https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt"],
+      "homepage": "https://github.com/uBlockOrigin/uAssets",
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "urlhaus",
+      "name": "Online Malicious URL Blocklist",
+      "description": "Malware distribution URLs from abuse.ch URLhaus.",
+      "category": "security",
+      "url": "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-ag-online.txt",
+      "homepage": "https://gitlab.com/malware-filter/urlhaus-filter",
+      "default": true,
+      "trusted": false
+    },
+    {
+      "id": "phishing",
+      "name": "Phishing URL Blocklist",
+      "description": "Known phishing sites.",
+      "category": "security",
+      "url": "https://malware-filter.gitlab.io/malware-filter/phishing-filter-ag.txt",
+      "homepage": "https://gitlab.com/malware-filter/phishing-filter",
+      "default": false,
+      "trusted": false
+    },
+    {
+      "id": "easylist-cookie",
+      "name": "EasyList Cookie List",
+      "description": "Hides cookie consent banners.",
+      "category": "annoyances",
+      "url": "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt",
+      "homepage": "https://easylist.to/",
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "adguard-cookies",
+      "name": "AdGuard Cookie Notices",
+      "description": "Hides cookie notices and clicks 'reject' where possible.",
+      "category": "annoyances",
+      "url": "https://filters.adtidy.org/extension/safari/filters/18.txt",
+      "mirrors": ["https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_18_Annoyances_Cookies/filter.txt"],
+      "homepage": "https://adguard.com/kb/general/ad-filtering/adguard-filters/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "fanboy-annoyance",
+      "name": "Fanboy's Annoyance List",
+      "description": "Newsletter popups, chat widgets, 'open in app' banners and more.",
+      "category": "annoyances",
+      "url": "https://secure.fanboy.co.nz/fanboy-annoyance.txt",
+      "homepage": "https://easylist.to/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "ubo-annoyances",
+      "name": "uBlock filters – Annoyances",
+      "description": "uBlock Origin's annoyance filters.",
+      "category": "annoyances",
+      "url": "https://ublockorigin.github.io/uAssets/filters/annoyances-others.txt",
+      "mirrors": ["https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/annoyances-others.txt"],
+      "homepage": "https://github.com/uBlockOrigin/uAssets",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "adguard-popups",
+      "name": "AdGuard Popups",
+      "description": "Push-notification prompts, subscription and survey popups.",
+      "category": "annoyances",
+      "url": "https://filters.adtidy.org/extension/safari/filters/19.txt",
+      "mirrors": ["https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_19_Annoyances_Popups/filter.txt"],
+      "homepage": "https://adguard.com/kb/general/ad-filtering/adguard-filters/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "adguard-app-banners",
+      "name": "AdGuard Mobile App Banners",
+      "description": "'Get our app' banners on mobile websites.",
+      "category": "annoyances",
+      "url": "https://filters.adtidy.org/extension/safari/filters/20.txt",
+      "mirrors": ["https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_20_Annoyances_MobileApp/filter.txt"],
+      "homepage": "https://adguard.com/kb/general/ad-filtering/adguard-filters/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "fanboy-social",
+      "name": "Fanboy's Social Blocking List",
+      "description": "Social media share buttons and embeds.",
+      "category": "social",
+      "url": "https://easylist.to/easylist/fanboy-social.txt",
+      "homepage": "https://easylist.to/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "easylist-germany",
+      "name": "EasyList Germany",
+      "description": "German-language sites.",
+      "category": "ads",
+      "region": "de",
+      "url": "https://easylist.to/easylistgermany/easylistgermany.txt",
+      "homepage": "https://easylist.to/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "liste-fr",
+      "name": "Liste FR",
+      "description": "French-language sites.",
+      "category": "ads",
+      "region": "fr",
+      "url": "https://easylist-downloads.adblockplus.org/liste_fr.txt",
+      "homepage": "https://forums.lanik.us/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "easylist-spanish",
+      "name": "EasyList Spanish",
+      "description": "Spanish-language sites.",
+      "category": "ads",
+      "region": "es",
+      "url": "https://easylist-downloads.adblockplus.org/easylistspanish.txt",
+      "homepage": "https://easylist.to/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "easylist-italy",
+      "name": "EasyList Italy",
+      "description": "Italian-language sites.",
+      "category": "ads",
+      "region": "it",
+      "url": "https://easylist-downloads.adblockplus.org/easylistitaly.txt",
+      "homepage": "https://easylist.to/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "easylist-dutch",
+      "name": "EasyList Dutch",
+      "description": "Dutch-language sites.",
+      "category": "ads",
+      "region": "nl",
+      "url": "https://easylist-downloads.adblockplus.org/easylistdutch.txt",
+      "homepage": "https://easylist.to/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "easylist-china",
+      "name": "EasyList China",
+      "description": "Chinese-language sites.",
+      "category": "ads",
+      "region": "zh",
+      "url": "https://easylist-downloads.adblockplus.org/easylistchina.txt",
+      "homepage": "https://easylist.to/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "adguard-japanese",
+      "name": "AdGuard Japanese",
+      "description": "Japanese-language sites.",
+      "category": "ads",
+      "region": "ja",
+      "url": "https://filters.adtidy.org/extension/safari/filters/7.txt",
+      "mirrors": ["https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_7_Japanese/filter.txt"],
+      "homepage": "https://adguard.com/kb/general/ad-filtering/adguard-filters/",
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "adguard-russian",
+      "name": "AdGuard Russian",
+      "description": "Russian-language sites.",
+      "category": "ads",
+      "region": "ru",
+      "url": "https://filters.adtidy.org/extension/safari/filters/1.txt",
+      "mirrors": ["https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_1_Russian/filter.txt"],
+      "homepage": "https://adguard.com/kb/general/ad-filtering/adguard-filters/",
+      "default": false,
+      "trusted": true
+    }
+  ]
+}
