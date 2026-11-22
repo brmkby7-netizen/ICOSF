@@ -517,7 +517,7 @@ function updatePlan() {
   const max = Number($('#to').options.length);
   const steps = rangeSteps(r);
   $('#start-label').textContent = `Start ayat ${span(r.from, r.to)}`;
-  $('#plan').textContent = `${describeSteps(steps)} · ${fmtDuration(stepsDuration(steps, r.gap))}`;
+  $('#plan').textContent = `${describeSteps(steps)} · ${fmtDuration(stepsDuration(steps, r.gap))}, then ${span(r.from, r.to)} on repeat until you move on`;
 
   // "Move on" is always available until the end of the surah (or of the marked timings).
   const plan = store.getPlan(current.num);
@@ -527,7 +527,7 @@ function updatePlan() {
   if (canMove) {
     const next = moveOnSteps(r);
     $('#move-on-label').textContent = `Move on: ayat ${span(r.from + 1, r.to + 1)}`;
-    $('#move-on-plan').textContent = `New ayah ${r.to + 1} ×${r.repeats}, then ${span(r.from + 1, r.to + 1)} together ×${r.link} · ${fmtDuration(stepsDuration(next, r.gap))}`;
+    $('#move-on-plan').textContent = `New ayah ${r.to + 1} ×${r.repeats}, then ${span(r.from + 1, r.to + 1)} together, on repeat until you move on again`;
     showMeaningOf(r.to + 1, $('#move-on-meaning'));
   }
   if (movedTo && movedTo !== r.to) movedTo = 0;
@@ -559,7 +559,7 @@ async function startRange() {
   const r = readRange();
   rememberRange(r);
   updatePlan();
-  await startSession({ steps: rangeSteps(r), gap: r.gap, title: `ayat ${span(r.from, r.to)}`, range: true });
+  await startSession({ steps: rangeSteps(r), gap: r.gap, title: `ayat ${span(r.from, r.to)}`, range: true, loop: { from: r.from, to: r.to } });
 }
 
 async function moveOn() {
@@ -575,7 +575,7 @@ async function moveOn() {
   rememberRange(next);
   movedTo = next.to;
   updatePlan();
-  await startSession({ steps: moveOnSteps(r), gap: r.gap, title: `ayat ${span(next.from, next.to)}`, range: true });
+  await startSession({ steps: moveOnSteps(r), gap: r.gap, title: `ayat ${span(next.from, next.to)}`, range: true, loop: { from: next.from, to: next.to } });
 }
 
 // ---------- reciter picker (searchable) ----------
@@ -1582,10 +1582,7 @@ document.addEventListener('visibilitychange', updateWakeLock);
 
 player.onState((s) => {
   if (s.error) toast(s.error, 5000);
-  if (s.done && current && s.meta?.surah === current.num && $('#plan')) {
-    updatePlan();
-    if (s.count > 1) { showDoneBar(); return; }
-  }
+  if (s.done && current && s.meta?.surah === current.num && $('#plan')) updatePlan();
   if (!s.active) {
     bar.hidden = true;
     document.body.classList.remove('has-player');
@@ -1600,8 +1597,11 @@ player.onState((s) => {
   if (s.kind === 'full') label = 'Whole surah';
   else if (s.kind === 'ayah') label = `Ayah ${s.from}`;
   else label = `Ayat ${s.from}–${s.to} together`;
-  if (s.repeats > 1) label += ` · ${s.r} of ${s.repeats}`;
-  if (s.count > 1) label = `${s.index + 1}/${s.count} · ${label}`;
+  if (s.looping) label += ` · on repeat (${s.r})`;   // keeps going until Move on or Stop
+  else {
+    if (s.repeats > 1) label += ` · ${s.r} of ${s.repeats}`;
+    if (s.count > 1) label = `${s.index + 1}/${s.count} · ${label}`;
+  }
 
   const multi = s.count > 1;
   const move = moveOnLabel(s.meta);
@@ -1619,34 +1619,13 @@ player.onState((s) => {
       </div>
     </div>
     ${move ? `<button class="player-move" data-move type="button"><span>${move}</span>${icons.next}</button>` : ''}
-    ${multi ? `<div class="player-progress"><i style="width:${Math.round(s.progress * 100)}%"></i></div>` : ''}`;
+    ${multi && !s.looping ? `<div class="player-progress"><i style="width:${Math.round(s.progress * 100)}%"></i></div>` : ''}`;
 });
 
 // "Move on: ayat 2–6" when the range on the open surah page can still move forward.
 function moveOnLabel(meta) {
   if (!meta?.range || !current || meta.surah !== current.num || !$('#move-on-box') || $('#move-on-box').hidden) return '';
   return esc($('#move-on-label').textContent);
-}
-
-// After a range session: offer to move on (or repeat) right from the bar.
-function showDoneBar() {
-  document.querySelector('.ayah.playing')?.classList.remove('playing');
-  lastHighlighted = null;
-  const { from, to } = readRange();
-  const move = moveOnLabel({ range: true, surah: current.num });
-  bar.hidden = false;
-  document.body.classList.add('has-player');
-  bar.innerHTML = `
-    <div class="player-inner done">
-      <div class="player-info">
-        <span class="player-title">Ayat ${span(from, to)} done. Well done!</span>
-        <span class="player-label">${move ? `Move on whenever you’re ready.` : 'You’ve reached the end of this surah.'}</span>
-      </div>
-      <div class="player-ctrls">
-        <button class="icon-btn" data-done="close" aria-label="Close">✕</button>
-      </div>
-    </div>
-    ${move ? `<button class="player-move" data-move type="button"><span>${move}</span>${icons.next}</button>` : ''}`;
 }
 
 function hideBar() {
@@ -1657,14 +1636,12 @@ function hideBar() {
 bar.addEventListener('click', (e) => {
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act) { player[act](); return; }
-  const done = e.target.closest('[data-done]')?.dataset.done;
-  if (e.target.closest('[data-move]')) { moveOn(); return; }
-  if (done === 'close') hideBar();
+  if (e.target.closest('[data-move]')) moveOn();
 });
 
 // ---------- settings ----------
 
-const APP_VERSION = '2026.11.22-1';
+const APP_VERSION = '2026.11.22-2';
 
 const selectRow = (name, label, options, value) => `
   <label class="row">

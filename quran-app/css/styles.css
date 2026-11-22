@@ -758,7 +758,6 @@ select { border-radius: 10px; }
 }
 .player-move + .player-progress { display: none; }
 .player-progress i { display: block; height: 100%; background: var(--accent); transition: width 0.3s; }
-.done .player-title { white-space: normal; }
 .wide-only { }
 @media (max-width: 480px) { .wide-only { display: none; } }
 

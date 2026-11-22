@@ -2,7 +2,9 @@
 //
 // A session is a list of steps. Each step plays ayat `from`..`to` as one continuous segment,
 // `repeats` times. `kind` is 'ayah' (a single ayah on its own), 'link' (several ayat read
-// together) or 'full' (the whole file). The app builds the step list; see buildSteps in app.js.
+// together) or 'full' (the whole file). The app builds the step list; see rangeSteps in app.js.
+// With `loop: { from, to }` the session doesn't end: after its steps it keeps repeating from..to
+// (the whole range together) until it's stopped or another session starts (Move on).
 //
 // The end of a segment is checked on `timeupdate` (keeps firing with the screen off), on a
 // short interval (precise while the page is visible) and on a timer set for the expected end.
@@ -49,8 +51,10 @@ export class Player {
     const s = this.session;
     if (!s) return { active: false, paused: false };
     const step = s.steps[s.i];
-    const total = s.steps.reduce((n, x) => n + x.repeats, 0);
-    const done = s.steps.slice(0, s.i).reduce((n, x) => n + x.repeats, 0) + (s.r - 1);
+    const planned = s.steps.filter((x) => !x.loop);   // the endless repeat isn't a numbered step
+    const looping = !!step.loop;
+    const total = planned.reduce((n, x) => n + x.repeats, 0);
+    const done = looping ? total : s.steps.slice(0, s.i).reduce((n, x) => n + x.repeats, 0) + (s.r - 1);
     return {
       active: true,
       paused: this.paused,
@@ -60,9 +64,10 @@ export class Player {
       to: step.to,
       r: s.r,
       repeats: step.repeats,
-      index: s.i,
-      count: s.steps.length,
-      progress: done / total,
+      looping,
+      index: looping ? planned.length - 1 : s.i,
+      count: planned.length,
+      progress: total ? done / total : 1,
       meta: s.meta,
     };
   }
@@ -102,9 +107,10 @@ export class Player {
     this.audio.src = src;
   }
 
-  start({ key, src, timings = null, steps, gap = 0, meta = {} }) {
+  start({ key, src, timings = null, steps, gap = 0, meta = {}, loop = null }) {
     this.stop(false);
     this._setSource(key, src);
+    if (loop) steps = [...steps, { kind: loop.from === loop.to ? 'ayah' : 'link', from: loop.from, to: loop.to, repeats: Infinity, loop: true }];
     this.session = { steps, timings, i: 0, r: 1, gap, meta };
     this.paused = false;
     this._run();
