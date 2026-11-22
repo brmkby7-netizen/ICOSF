@@ -9,11 +9,11 @@ const AUDIO_CACHE = 'qm-audio';
 // mark them once per surah. Ids: 'r<read id>' ('abkar' kept for Idris Abkar's read 12, so
 // earlier saved settings still work) and 'sobhi'.
 const ABKAR = {
-  id: 'abkar', name: 'Idris Abkar', style: '', timingRead: 12, popular: true,
+  id: 'abkar', name: 'Idris Abkar', nameAr: 'إدريس أبكر', style: '', timingRead: 12, popular: true,
   server: 'https://cdn.mp3quran.net/audio/idrees-abkar/r1/',
 };
 const SOBHI = {
-  id: 'sobhi', name: 'Islam Sobhi', style: '', timingRead: null, popular: true, bundled: true,
+  id: 'sobhi', name: 'Islam Sobhi', nameAr: 'إسلام صبحي', style: '', timingRead: null, popular: true, bundled: true,
   mp3quranId: 253, moshafId: 253,
   server: 'https://cdn.mp3quran.net/audio/islam-sobhi/r1/',
 };
@@ -37,13 +37,18 @@ function styleOf(moshafName, rewaya) {
 export async function getReciters() {
   if (loadedReciters) return loadedReciters;
   try {
-    const [reads, eng] = await Promise.all([
+    const [reads, eng, ar] = await Promise.all([
       getJson(`${MP3}/ayat_timing/reads`),
       getJson(`${MP3}/reciters?language=eng`).catch(() => null),
+      getJson(`${MP3}/reciters?language=ar`).catch(() => null),   // Arabic names, for search
     ]);
     const byServer = new Map();
     for (const r of eng?.reciters || []) {
       for (const m of r.moshaf || []) byServer.set(m.server, { name: r.name, moshaf: m.name });
+    }
+    const arabicName = new Map();
+    for (const r of ar?.reciters || []) {
+      for (const m of r.moshaf || []) arabicName.set(m.server, r.name);
     }
     const list = [];
     for (const x of reads) {
@@ -53,7 +58,8 @@ export async function getReciters() {
       const id = x.id === 12 ? 'abkar' : `r${x.id}`;
       list.push({
         id,
-        name: (info?.name || titleFromSlug(x.folder_url)).trim(),
+        name: x.id === 12 ? ABKAR.name : (info?.name || titleFromSlug(x.folder_url)).trim(),
+        nameAr: arabicName.get(x.folder_url) || '',
         style: styleOf(info?.moshaf, x.rewaya),
         timingRead: x.id,
         server: x.folder_url,

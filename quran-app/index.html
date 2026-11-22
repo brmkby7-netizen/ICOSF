@@ -111,6 +111,20 @@
     </form>
   </dialog>
 
+  <dialog id="reciter-sheet" class="sheet picker-sheet" aria-labelledby="reciter-sheet-title">
+    <form method="dialog">
+      <div class="grabber" aria-hidden="true"></div>
+      <header class="sheet-head">
+        <h2 id="reciter-sheet-title">Reciter</h2>
+        <button class="sheet-done" value="close">Done</button>
+      </header>
+      <div class="search">
+        <input type="search" id="reciter-q" placeholder="Search in English or Arabic" aria-label="Search reciters" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+      </div>
+      <div class="picker-results" id="reciter-results"></div>
+    </form>
+  </dialog>
+
   <dialog id="tafsir" class="sheet tafsir-sheet" aria-labelledby="tafsir-title">
     <form method="dialog">
       <div class="grabber" aria-hidden="true"></div>

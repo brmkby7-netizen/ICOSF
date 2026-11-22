@@ -7,6 +7,7 @@ import * as recite from './recite/client.js';
 import { ReciteSession } from './recite/session.js';
 import { ayahRef } from './recite/engine.js';
 import * as context from './context.js';
+import { searchReciters } from './search.js';
 import { $, esc, arNum, fmtDuration, maxContiguous, toast, icons } from './ui.js';
 
 const TOTAL_AYAT = 6236;
@@ -165,17 +166,6 @@ async function surahView(n) {
   cleanup = () => { offTime(); lastHighlighted = null; };
 }
 
-function reciterOptions() {
-  const list = api.reciterList();
-  const opt = (r) => `<option value="${r.id}" ${r.id === settings.reciter ? 'selected' : ''}>${esc(api.reciterLabel(r))}</option>`;
-  const popular = list.filter((r) => r.popular && r.timingRead);
-  const others = list.filter((r) => !r.popular && r.timingRead);
-  const manual = list.filter((r) => !r.timingRead);
-  return `<optgroup label="Popular">${popular.map(opt).join('')}</optgroup>
-    ${others.length ? `<optgroup label="All reciters (A–Z)">${others.map(opt).join('')}</optgroup>` : ''}
-    <optgroup label="Mark ayah timings yourself">${manual.map(opt).join('')}</optgroup>`;
-}
-
 function selectOptions(max, selected) {
   let out = '';
   for (let i = 1; i <= max; i++) out += `<option value="${i}" ${i === selected ? 'selected' : ''}>${i}</option>`;
@@ -202,10 +192,10 @@ function renderSurah() {
     <section class="practice" aria-label="Practice">
       <h2 class="list-header">Practice</h2>
       <div class="list">
-        <label class="row">
+        <button type="button" class="row chev" id="reciter-btn" aria-haspopup="dialog">
           <span class="row-label">Reciter</span>
-          <select id="reciter" class="row-select reciter-select" aria-label="Reciter">${reciterOptions()}</select>
-        </label>
+          <span class="row-value reciter-value" id="reciter-name">${esc(api.reciterLabel(api.reciter(settings.reciter)))}</span>
+        </button>
       </div>
       <div id="audio-status"></div>
       <div id="practice-controls" hidden>
@@ -262,11 +252,13 @@ function renderSurah() {
 
   updateMemCount();
 
-  $('#reciter').addEventListener('change', (e) => {
+  $('#reciter-btn').addEventListener('click', () => openReciterPicker((id) => {
+    if (id === settings.reciter) return;
     if (player.session) player.stop();
-    saveSettings({ reciter: e.target.value });
+    saveSettings({ reciter: id });
+    $('#reciter-name').textContent = api.reciterLabel(api.reciter(id));
     loadAudioState();
-  });
+  }));
 
   for (const id of ['from', 'to', 'repeats', 'link', 'gap']) $(`#${id}`).addEventListener('change', updatePlan);
   $('#page').addEventListener('change', (e) => {
@@ -585,6 +577,73 @@ async function moveOn() {
   updatePlan();
   await startSession({ steps: moveOnSteps(r), gap: r.gap, title: `ayat ${span(next.from, next.to)}`, range: true });
 }
+
+// ---------- reciter picker (searchable) ----------
+
+const reciterDlg = $('#reciter-sheet');
+let onReciterPick = null;
+
+function openReciterPicker(onPick) {
+  onReciterPick = onPick;
+  $('#reciter-q').value = '';
+  renderReciters('');
+  reciterDlg.showModal();
+  $('#reciter-results').scrollTop = 0;
+  reciterDlg.querySelector('.pick-row[aria-selected="true"]')?.scrollIntoView({ block: 'center' });
+}
+
+function reciterRow(r) {
+  const on = r.id === settings.reciter;
+  return `<button type="button" class="row pick-row" role="option" aria-selected="${on}" data-id="${esc(r.id)}">
+    <span class="row-label">
+      <span class="pick-name">${esc(api.reciterLabel(r))}</span>
+      ${r.nameAr ? `<span class="pick-ar" lang="ar">${esc(r.nameAr)}</span>` : ''}
+    </span>
+    ${on ? `<span class="pick-check" aria-hidden="true">${icons.check}</span>` : ''}
+  </button>`;
+}
+
+function renderReciters(query) {
+  const list = api.reciterList();
+  const box = $('#reciter-results');
+  const q = query.trim();
+  if (!q) {
+    const groups = [
+      ['Popular', list.filter((r) => r.popular && r.timingRead), ''],
+      ['All reciters (A–Z)', list.filter((r) => !r.popular && r.timingRead), ''],
+      ['Mark ayah timings yourself', list.filter((r) => !r.timingRead), 'No published ayah timings: you tap along once per surah.'],
+    ];
+    box.innerHTML = groups.filter(([, g]) => g.length).map(([label, g, note]) => `
+      <h3 class="list-header">${label}</h3>
+      <div class="list" role="listbox" aria-label="${label}">${g.map(reciterRow).join('')}</div>
+      ${note ? `<p class="list-footer">${note}</p>` : ''}`).join('');
+    return;
+  }
+  const found = searchReciters(list, q);
+  box.innerHTML = found.length
+    ? `<h3 class="list-header">${found.length === 1 ? '1 reciter' : `${found.length} reciters`}</h3>
+       <div class="list" role="listbox" aria-label="Search results">${found.map(reciterRow).join('')}</div>`
+    : `<p class="empty-search muted">No reciter matches “${esc(q)}”. Try part of the name, or type it in Arabic.</p>`;
+}
+
+function pickReciter(id) {
+  const fn = onReciterPick;
+  onReciterPick = null;
+  reciterDlg.close();
+  fn?.(id);
+}
+
+$('#reciter-q').addEventListener('input', (e) => renderReciters(e.target.value));
+$('#reciter-q').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();   // Enter picks the best match instead of closing the sheet
+  const first = $('#reciter-results .pick-row');
+  if (first) pickReciter(first.dataset.id);
+});
+$('#reciter-results').addEventListener('click', (e) => {
+  const row = e.target.closest('.pick-row');
+  if (row) pickReciter(row.dataset.id);
+});
 
 // ---------- understand before you memorize (classical tafsir) ----------
 
@@ -1605,7 +1664,7 @@ bar.addEventListener('click', (e) => {
 
 // ---------- settings ----------
 
-const APP_VERSION = '2026.11.21-2';
+const APP_VERSION = '2026.11.22-1';
 
 const selectRow = (name, label, options, value) => `
   <label class="row">
