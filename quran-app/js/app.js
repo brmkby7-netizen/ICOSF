@@ -252,13 +252,7 @@ function renderSurah() {
 
   updateMemCount();
 
-  $('#reciter-btn').addEventListener('click', () => openReciterPicker((id) => {
-    if (id === settings.reciter) return;
-    if (player.session) player.stop();
-    saveSettings({ reciter: id });
-    $('#reciter-name').textContent = api.reciterLabel(api.reciter(id));
-    loadAudioState();
-  }));
+  $('#reciter-btn').addEventListener('click', () => openReciterPicker(changeReciter));
 
   for (const id of ['from', 'to', 'repeats', 'link', 'gap']) $(`#${id}`).addEventListener('change', updatePlan);
   $('#page').addEventListener('change', (e) => {
@@ -376,6 +370,7 @@ function refreshMemorized() {
   updateMemCount();
 }
 
+// Loads the chosen reciter's audio and timings for the open surah. Returns true when practice can start.
 async function loadAudioState() {
   const r = api.reciter(settings.reciter);
   const { num, verses } = current;
@@ -388,10 +383,10 @@ async function loadAudioState() {
   box.innerHTML = loading('Loading recitation…');
 
   const available = await api.isAvailable(r, num);
-  if (current?.num !== num || settings.reciter !== r.id) return;
+  if (current?.num !== num || settings.reciter !== r.id) return false;
   if (!available) {
     box.innerHTML = notice(`${esc(r.name)}’s recording of this surah isn’t available. Choose another reciter.`);
-    return;
+    return false;
   }
 
   let timings, source;
@@ -399,12 +394,12 @@ async function loadAudioState() {
     ({ timings, source } = await rawTimings(r, num));
   } catch {
     box.innerHTML = notice('Couldn’t load the ayah timings. Check your connection and open this surah again.');
-    return;
+    return false;
   }
-  if (current?.num !== num || settings.reciter !== r.id) return;
+  if (current?.num !== num || settings.reciter !== r.id) return false;
   if (r.timingRead && !Object.keys(timings || {}).length) {
     box.innerHTML = notice(`${esc(api.reciterLabel(r))}’s recording of this surah isn’t available. Choose another reciter.`);
-    return;
+    return false;
   }
 
   current.timings = store.withFixes(r.id, num, timings);
@@ -420,7 +415,7 @@ async function loadAudioState() {
        <button class="btn ghost" id="play-full" type="button">${icons.play}<span>Play whole surah</span></button>`,
     );
     $('#play-full').addEventListener('click', playFull);
-    return;
+    return false;
   }
 
   if (!r.timingRead && marked < verses.length) {
@@ -447,6 +442,34 @@ async function loadAudioState() {
   controls.hidden = false;
   updatePlan();
   fillPageSelect(marked);
+  return true;
+}
+
+// Switch reciter. If a session of this surah is playing, it carries on with the new reciter from the
+// start of the current step; if the new reciter can't play it, it stops and says why.
+async function changeReciter(id) {
+  if (id === settings.reciter) return;
+  saveSettings({ reciter: id });
+  const r = api.reciter(id);
+  $('#reciter-name').textContent = api.reciterLabel(r);
+  const s = player.session;
+  const carryOn = s && current && s.meta.surah === current.num;
+  if (s && !carryOn) player.stop();
+  const ready = await loadAudioState();
+  if (settings.reciter !== id || !current) return;   // another reciter was picked meanwhile
+  if (!carryOn || player.session !== s) return;
+  const covered = ready && s.steps.every((st) => st.kind === 'full' || (current.timings[st.from] && current.timings[st.to]));
+  if (!covered) {
+    player.stop();
+    toast(ready
+      ? `${api.reciterLabel(r)} has timings for ayat 1–${maxContiguous(current.timings)} only, so playback stopped.`
+      : `Playback stopped: ${api.reciterLabel(r)} can’t play this surah yet.`, 5000);
+    return;
+  }
+  const src = await api.resolveAudio(current.audioUrl);
+  if (player.session !== s || settings.reciter !== id) return;
+  player.switchSource({ key: current.audioUrl, src, timings: current.timings, meta: { reciter: api.reciterLabel(r) } });
+  toast(`Now playing ${api.reciterLabel(r)}`);
 }
 
 function fillRangeSelects(max) {
@@ -874,10 +897,11 @@ async function toggleOffline(saved) {
 
 function highlight(t, session) {
   const step = session.steps[session.i];
-  if (!current || session.meta.surah !== current.num || step.kind === 'full' || !current.timings) return;
+  const timings = session.timings || current?.timings;
+  if (!current || session.meta.surah !== current.num || step.kind === 'full' || !timings) return;
   let playing = null;
   for (let k = step.from; k <= step.to; k++) {
-    const seg = current.timings[k];
+    const seg = timings[k];
     if (seg && t >= seg.start - 50 && t < seg.end) { playing = k; break; }
   }
   if (playing === lastHighlighted) return;
@@ -1641,7 +1665,7 @@ bar.addEventListener('click', (e) => {
 
 // ---------- settings ----------
 
-const APP_VERSION = '2026.11.22-2';
+const APP_VERSION = '2026.11.22-3';
 
 const selectRow = (name, label, options, value) => `
   <label class="row">

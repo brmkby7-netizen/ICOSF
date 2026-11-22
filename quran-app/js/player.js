@@ -116,6 +116,24 @@ export class Player {
     this._run();
   }
 
+  // Another reciter for the same session: new audio and timings, carrying on from the start of the
+  // current step and repeat (or the step after a pause to recite). A paused session stays paused.
+  switchSource({ key, src, timings, meta = {} }) {
+    const s = this.session;
+    if (!s) return;
+    this.token++;                 // ends the current segment or gap
+    this._pauseAudio();
+    this.audio.muted = false;
+    this.key = key;
+    this.audio.src = src;
+    s.timings = timings;
+    Object.assign(s.meta, meta);
+    this.gapping = false;
+    this.inSegment = false;
+    this._tick = null;
+    this._run();
+  }
+
   pause() {
     if (!this.session || this.paused) return;
     this.paused = true;
