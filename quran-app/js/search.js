@@ -42,8 +42,9 @@ function wordScore(q, words, skels) {
   return best;
 }
 
-// list: [{ name, nameAr, style, popular }]. Returns the matching reciters, best first.
-export function searchReciters(list, query) {
+// list: [{ id, name, nameAr, style, popular }]. Returns the matching reciters, best first
+// (among equally good matches: favorites, then well-known reciters).
+export function searchReciters(list, query, { favorites = new Set() } = {}) {
   const arabic = isArabic(query);
   const q = arabic ? arabicWords(query) : latinWords(query);
   if (!q.length) return [];
@@ -63,6 +64,7 @@ export function searchReciters(list, query) {
     if (score) out.push({ r, score });
   }
   out.sort((a, b) => b.score - a.score
+    || (favorites.has(b.r.id) ? 1 : 0) - (favorites.has(a.r.id) ? 1 : 0)
     || (b.r.popular ? 1 : 0) - (a.r.popular ? 1 : 0)
     || a.r.name.localeCompare(b.r.name)
     || (a.r.style ? 1 : 0) - (b.r.style ? 1 : 0));   // the plain recitation before the Mujawwad one

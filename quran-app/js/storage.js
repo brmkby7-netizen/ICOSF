@@ -29,6 +29,7 @@ const DEFAULTS = {
   tajweed: true,
   autoscroll: true,
   keepAwake: true,
+  favoriteReciters: [],
   theme: 'auto',
   repeats: 3,
   linkRepeats: 2,

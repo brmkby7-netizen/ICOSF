@@ -144,7 +144,8 @@ export class Player {
   resume() {
     if (!this.session || !this.paused) return;
     this.paused = false;
-    if (this.inSegment || this.gapping) this.audio.play().catch((e) => this._fail(playError(e)));
+    // also while a jump is still under way (muted): the segment then carries on from where it lands
+    this.audio.play().catch((e) => this._fail(playError(e)));
     this._emit();
   }
 
@@ -250,8 +251,9 @@ export class Player {
         clearInterval(timer);
         clearTimeout(endTimer);
         a.removeEventListener('ended', onEnded);
-        this._tick = null;
-        this.inSegment = false;
+        // a segment that was cut short (switch, next, previous) mustn't clear the state of the one now playing
+        if (this._tick === check) this._tick = null;
+        if (token === this.token) this.inSegment = false;
         resolve(ok);
       };
       const check = () => {

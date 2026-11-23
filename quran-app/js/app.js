@@ -196,6 +196,7 @@ function renderSurah() {
           <span class="row-label">Reciter</span>
           <span class="row-value reciter-value" id="reciter-name">${esc(api.reciterLabel(api.reciter(settings.reciter)))}</span>
         </button>
+        <div class="fav-chips" id="fav-chips" role="group" aria-label="Favorite reciters" hidden></div>
       </div>
       <div id="audio-status"></div>
       <div id="practice-controls" hidden>
@@ -253,6 +254,11 @@ function renderSurah() {
   updateMemCount();
 
   $('#reciter-btn').addEventListener('click', () => openReciterPicker(changeReciter));
+  $('#fav-chips').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-reciter]');
+    if (chip) changeReciter(chip.dataset.reciter);
+  });
+  renderFavChips();
 
   for (const id of ['from', 'to', 'repeats', 'link', 'gap']) $(`#${id}`).addEventListener('change', updatePlan);
   $('#page').addEventListener('change', (e) => {
@@ -452,6 +458,7 @@ async function changeReciter(id) {
   saveSettings({ reciter: id });
   const r = api.reciter(id);
   $('#reciter-name').textContent = api.reciterLabel(r);
+  renderFavChips();
   const s = player.session;
   const carryOn = s && current && s.meta.surah === current.num;
   if (s && !carryOn) player.stop();
@@ -615,38 +622,73 @@ function openReciterPicker(onPick) {
   reciterDlg.querySelector('.pick-row[aria-selected="true"]')?.scrollIntoView({ block: 'center' });
 }
 
-function reciterRow(r) {
+const favorites = () => new Set(settings.favoriteReciters || []);
+const favoriteList = () => (settings.favoriteReciters || []).map((id) => api.reciterList().find((r) => r.id === id)).filter(Boolean);
+
+function reciterRow(r, favs) {
   const on = r.id === settings.reciter;
-  return `<button type="button" class="row pick-row" role="option" aria-selected="${on}" data-id="${esc(r.id)}">
-    <span class="row-label">
-      <span class="pick-name">${esc(api.reciterLabel(r))}</span>
-      ${r.nameAr ? `<span class="pick-ar" lang="ar">${esc(r.nameAr)}</span>` : ''}
-    </span>
-    ${on ? `<span class="pick-check" aria-hidden="true">${icons.check}</span>` : ''}
-  </button>`;
+  const fav = favs.has(r.id);
+  const name = api.reciterLabel(r);
+  return `<div class="row pick-row" role="option" aria-selected="${on}">
+    <button type="button" class="pick-main" data-id="${esc(r.id)}">
+      <span class="row-label">
+        <span class="pick-name">${esc(name)}</span>
+        ${r.nameAr ? `<span class="pick-ar" lang="ar">${esc(r.nameAr)}</span>` : ''}
+      </span>
+      ${on ? `<span class="pick-check" aria-hidden="true">${icons.check}</span>` : ''}
+    </button>
+    <button type="button" class="fav-btn${fav ? ' on' : ''}" data-fav="${esc(r.id)}" aria-pressed="${fav}" aria-label="${fav ? `Remove ${esc(name)} from favorites` : `Add ${esc(name)} to favorites`}">${fav ? icons.starFill : icons.star}</button>
+  </div>`;
 }
 
 function renderReciters(query) {
   const list = api.reciterList();
+  const favs = favorites();
   const box = $('#reciter-results');
   const q = query.trim();
+  const group = (label, items, note = '') => `
+    <h3 class="list-header">${label}</h3>
+    <div class="list" role="listbox" aria-label="${label}">${items.map((r) => reciterRow(r, favs)).join('')}</div>
+    ${note ? `<p class="list-footer">${note}</p>` : ''}`;
   if (!q) {
-    const groups = [
+    const favList = favoriteList();
+    box.innerHTML = (favList.length ? group('Favorites', favList) : '<p class="list-footer fav-hint">Tap ☆ next to a reciter to add them to your favorites.</p>') + [
       ['Popular', list.filter((r) => r.popular && r.timingRead), ''],
       ['All reciters (A–Z)', list.filter((r) => !r.popular && r.timingRead), ''],
       ['Mark ayah timings yourself', list.filter((r) => !r.timingRead), 'No published ayah timings: you tap along once per surah.'],
-    ];
-    box.innerHTML = groups.filter(([, g]) => g.length).map(([label, g, note]) => `
-      <h3 class="list-header">${label}</h3>
-      <div class="list" role="listbox" aria-label="${label}">${g.map(reciterRow).join('')}</div>
-      ${note ? `<p class="list-footer">${note}</p>` : ''}`).join('');
+    ].filter(([, g]) => g.length).map(([label, g, note]) => group(label, g, note)).join('');
     return;
   }
-  const found = searchReciters(list, q);
+  const found = searchReciters(list, q, { favorites: favs });
   box.innerHTML = found.length
-    ? `<h3 class="list-header">${found.length === 1 ? '1 reciter' : `${found.length} reciters`}</h3>
-       <div class="list" role="listbox" aria-label="Search results">${found.map(reciterRow).join('')}</div>`
+    ? group(found.length === 1 ? '1 reciter' : `${found.length} reciters`, found)
     : `<p class="empty-search muted">No reciter matches “${esc(q)}”. Try part of the name, or type it in Arabic.</p>`;
+}
+
+function toggleFavorite(id) {
+  const list = settings.favoriteReciters || [];
+  const on = list.includes(id);
+  saveSettings({ favoriteReciters: on ? list.filter((x) => x !== id) : [...list, id] });
+  const box = $('#reciter-results');
+  const top = box.scrollTop;
+  renderReciters($('#reciter-q').value);
+  box.scrollTop = top;
+  renderFavChips();
+  const r = api.reciter(id);
+  toast(on ? `${api.reciterLabel(r)} removed from favorites` : `${api.reciterLabel(r)} added to favorites`);
+}
+
+// One-tap switching between favorite reciters, under the Reciter row on the surah page
+function renderFavChips() {
+  const box = $('#fav-chips');
+  if (!box) return;
+  const favList = favoriteList();
+  box.hidden = !favList.length;
+  box.innerHTML = favList.map((r) => {
+    const on = r.id === settings.reciter;
+    return `<button type="button" class="chip${on ? ' on' : ''}" data-reciter="${esc(r.id)}" aria-pressed="${on}">${esc(api.reciterLabel(r))}</button>`;
+  }).join('');
+  box.querySelector('.chip.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 function pickReciter(id) {
@@ -660,12 +702,27 @@ $('#reciter-q').addEventListener('input', (e) => renderReciters(e.target.value))
 $('#reciter-q').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   e.preventDefault();   // Enter picks the best match instead of closing the sheet
-  const first = $('#reciter-results .pick-row');
+  const first = $('#reciter-results .pick-main');
   if (first) pickReciter(first.dataset.id);
 });
 $('#reciter-results').addEventListener('click', (e) => {
-  const row = e.target.closest('.pick-row');
+  const fav = e.target.closest('[data-fav]');
+  if (fav) { toggleFavorite(fav.dataset.fav); return; }
+  const row = e.target.closest('.pick-main');
   if (row) pickReciter(row.dataset.id);
+});
+
+// On a computer, clicking anywhere on a row with a dropdown opens it (a phone already does this
+// when the row is tapped). Otherwise only the small value at the right edge opens the list.
+const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+document.addEventListener('click', (e) => {
+  if (!finePointer.matches) return;
+  const row = e.target.closest('label.row');
+  if (!row || e.target.closest('select, input, button, a')) return;
+  const sel = row.querySelector('select');
+  if (!sel || sel.disabled || typeof sel.showPicker !== 'function') return;
+  e.preventDefault();
+  try { sel.showPicker(); } catch { sel.focus(); }
 });
 
 // ---------- understand before you memorize (classical tafsir) ----------
@@ -1665,7 +1722,7 @@ bar.addEventListener('click', (e) => {
 
 // ---------- settings ----------
 
-const APP_VERSION = '2026.11.22-3';
+const APP_VERSION = '2026.11.23-1';
 
 const selectRow = (name, label, options, value) => `
   <label class="row">
