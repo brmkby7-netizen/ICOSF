@@ -6,6 +6,7 @@
 #include "SParallaxWindowPanel.h"
 
 #include "ContentBrowserMenuContexts.h"
+#include "HAL/IConsoleManager.h"
 #include "Engine/StaticMesh.h"
 #include "Framework/Docking/TabManager.h"
 #include "MessageLogModule.h"
@@ -32,8 +33,14 @@ public:
 			FOnSpawnTab::CreateRaw(this, &FParallaxWindowToolEditorModule::SpawnTab))
 			.SetDisplayName(LOCTEXT("TabTitle", "Parallax Window Tool"))
 			.SetTooltipText(LOCTEXT("TabTooltip", "Turn building glass into parallax interior windows."))
-			.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.StaticMesh")))
-			.SetMenuType(ETabSpawnerMenuType::Hidden);
+			.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.StaticMesh")));
+
+		// Console command (` key): ParallaxWindowTool
+		OpenCommand = IConsoleManager::Get().RegisterConsoleCommand(
+			TEXT("ParallaxWindowTool"),
+			TEXT("Open the Parallax Window Tool panel."),
+			FConsoleCommandDelegate::CreateLambda([]() { FGlobalTabmanager::Get()->TryInvokeTab(ParallaxWindowToolEditor::TabName); }),
+			ECVF_Default);
 
 		FMessageLogModule& MessageLog = FModuleManager::LoadModuleChecked<FMessageLogModule>(TEXT("MessageLog"));
 		FMessageLogInitializationOptions LogOptions;
@@ -51,6 +58,12 @@ public:
 		UToolMenus::UnRegisterStartupCallback(this);
 		UToolMenus::UnregisterOwner(this);
 
+		if (OpenCommand)
+		{
+			IConsoleManager::Get().UnregisterConsoleObject(OpenCommand);
+			OpenCommand = nullptr;
+		}
+
 		if (FSlateApplication::IsInitialized())
 		{
 			FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TabName);
@@ -62,6 +75,13 @@ public:
 	}
 
 private:
+	IConsoleObject* OpenCommand = nullptr;
+
+	static void OpenPanel()
+	{
+		FGlobalTabmanager::Get()->TryInvokeTab(ParallaxWindowToolEditor::TabName);
+	}
+
 	TSharedRef<SDockTab> SpawnTab(const FSpawnTabArgs& Args)
 	{
 		return SNew(SDockTab)
@@ -75,19 +95,34 @@ private:
 	{
 		FToolMenuOwnerScoped OwnerScoped(this);
 
-		// Window > Parallax Window Tool
-		if (UToolMenu* WindowMenu = UToolMenus::Get()->ExtendMenu(TEXT("LevelEditor.MainMenu.Window")))
+		const FSlateIcon Icon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.StaticMesh"));
+		const FUIAction OpenAction(FExecuteAction::CreateStatic(&FParallaxWindowToolEditorModule::OpenPanel));
+
+		// Tools > Parallax Window Tool, and Window > Parallax Window Tool
+		for (const TCHAR* MenuName : { TEXT("LevelEditor.MainMenu.Tools"), TEXT("LevelEditor.MainMenu.Window") })
 		{
-			FToolMenuSection& Section = WindowMenu->FindOrAddSection(TEXT("ParallaxWindowTool"), LOCTEXT("WindowSection", "Parallax Window Tool"));
-			Section.AddMenuEntry(
-				TEXT("OpenParallaxWindowTool"),
-				LOCTEXT("OpenTab", "Parallax Window Tool"),
-				LOCTEXT("OpenTabTip", "Open the Parallax Window Tool panel."),
-				FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.StaticMesh")),
-				FUIAction(FExecuteAction::CreateLambda([]()
-				{
-					FGlobalTabmanager::Get()->TryInvokeTab(ParallaxWindowToolEditor::TabName);
-				})));
+			if (UToolMenu* Menu = UToolMenus::Get()->ExtendMenu(MenuName))
+			{
+				FToolMenuSection& Section = Menu->FindOrAddSection(TEXT("ParallaxWindowTool"), LOCTEXT("MenuSection", "Parallax Window Tool"));
+				Section.AddMenuEntry(
+					TEXT("OpenParallaxWindowTool"),
+					LOCTEXT("OpenTab", "Parallax Window Tool"),
+					LOCTEXT("OpenTabTip", "Open the Parallax Window Tool panel."),
+					Icon,
+					OpenAction);
+			}
+		}
+
+		// Level editor toolbar button
+		if (UToolMenu* Toolbar = UToolMenus::Get()->ExtendMenu(TEXT("LevelEditor.LevelEditorToolBar.User")))
+		{
+			FToolMenuSection& Section = Toolbar->FindOrAddSection(TEXT("ParallaxWindowTool"));
+			Section.AddEntry(FToolMenuEntry::InitToolBarButton(
+				TEXT("OpenParallaxWindowToolButton"),
+				OpenAction,
+				LOCTEXT("ToolbarLabel", "Parallax Windows"),
+				LOCTEXT("OpenTabTip2", "Open the Parallax Window Tool panel."),
+				Icon));
 		}
 
 		// Right-click a static mesh in the Content Browser > Analyze Parallax Windows
