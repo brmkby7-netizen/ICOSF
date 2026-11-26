@@ -26,7 +26,6 @@
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionConstant3Vector.h"
 #include "Materials/MaterialExpressionCustom.h"
-#include "Materials/MaterialExpressionCustomPrimitiveData.h"
 #include "Materials/MaterialExpressionFrac.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionObjectPositionWS.h"
@@ -430,8 +429,13 @@ namespace ParallaxWindowBuilderPrivate
 		UMaterialExpression* PixelDepth = Create(UMaterialExpressionPixelDepth::StaticClass());
 
 		// --- Seeds
-		UMaterialExpressionCustomPrimitiveData* SeedCPD = CastChecked<UMaterialExpressionCustomPrimitiveData>(Create(UMaterialExpressionCustomPrimitiveData::StaticClass()));
-		SeedCPD->DataIndex = 0;
+		// Building seed: a scalar parameter bound to Custom Primitive Data index 0.
+		UMaterialExpressionScalarParameter* SeedCPD = CastChecked<UMaterialExpressionScalarParameter>(Create(UMaterialExpressionScalarParameter::StaticClass()));
+		SeedCPD->ParameterName = FName(TEXT("Building Seed"));
+		SeedCPD->DefaultValue = 0.f;
+		SeedCPD->Group = FName(TEXT("00 Seed"));
+		SeedCPD->bUseCustomPrimitiveData = true;
+		SeedCPD->PrimitiveDataIndex = 0;
 		UMaterialExpressionPerInstanceCustomData* SeedInstance = CastChecked<UMaterialExpressionPerInstanceCustomData>(Create(UMaterialExpressionPerInstanceCustomData::StaticClass()));
 		SeedInstance->DataIndex = 0;
 		SeedInstance->ConstDefaultValue = 0.f;
