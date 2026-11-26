@@ -27,6 +27,10 @@ public class ParallaxWindowToolEditor : ModuleRules
 			"AssetRegistry",
 			"PropertyEditor",
 			"MessageLog",
+			"MaterialEditor",   // UMaterialEditingLibrary
+			"Projects",         // IPluginManager (to find Shaders/)
+			"ImageCore",        // FImage resize for texture arrays
+			"EditorFramework",
 
 			// Mesh processing
 			"MeshDescription",

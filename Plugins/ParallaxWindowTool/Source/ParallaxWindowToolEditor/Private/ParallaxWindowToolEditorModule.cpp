@@ -2,6 +2,7 @@
 #include "Modules/ModuleManager.h"
 
 #include "ParallaxWindowAnalyzer.h"
+#include "ParallaxWindowMaterialBuilder.h"
 #include "SParallaxWindowPanel.h"
 
 #include "ContentBrowserMenuContexts.h"
@@ -109,6 +110,32 @@ private:
 				LOCTEXT("AnalyzeEntryTip", "Detect window panes in the glass slot, write parallax UVs and save a new '_Parallax' mesh."),
 				FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.StaticMesh")),
 				FToolUIActionChoice(Action));
+
+			FToolUIAction AssignAction;
+			AssignAction.ExecuteAction = FToolMenuExecuteAction::CreateLambda([](const FToolMenuContext& Context)
+			{
+				if (const UContentBrowserAssetContextMenuContext* MenuContext = Context.FindContext<UContentBrowserAssetContextMenuContext>())
+				{
+					TArray<UStaticMesh*> Meshes;
+					for (const FAssetData& Asset : MenuContext->SelectedAssets)
+					{
+						if (UStaticMesh* Mesh = Cast<UStaticMesh>(Asset.GetAsset()))
+						{
+							Meshes.Add(Mesh);
+						}
+					}
+					FString Report;
+					FParallaxWindowMaterialBuilder::AssignClassMaterials(Meshes, Report);
+					UE_LOG(LogTemp, Log, TEXT("Parallax Window Tool:\n%s"), *Report);
+				}
+			});
+
+			Section.AddMenuEntry(
+				TEXT("AssignParallaxInstances"),
+				LOCTEXT("AssignEntry", "Assign Parallax Instances"),
+				LOCTEXT("AssignEntryTip", "Put the Square / Portrait / Landscape / Storefront material instances into this processed mesh's Parallax_* slots."),
+				FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.MaterialInstanceConstant")),
+				FToolUIActionChoice(AssignAction));
 		}
 	}
 };

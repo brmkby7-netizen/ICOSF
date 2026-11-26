@@ -94,6 +94,14 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "Materials")
 	TSoftObjectPtr<UMaterialInterface> StorefrontMaterial;
 
+	/** Texture library used by "Rebuild Texture Arrays". */
+	UPROPERTY(config, EditAnywhere, Category = "Materials", meta = (AllowedClasses = "/Script/ParallaxWindowToolEditor.ParallaxTextureLibrary"))
+	FSoftObjectPath TextureLibrary;
+
+	/** Folder for the generated master material, instances, parameter collection and texture arrays. */
+	UPROPERTY(config, EditAnywhere, Category = "Materials")
+	FString ToolContentFolder;
+
 	// ---------------------------------------------------------------- Output
 
 	/** Appended to the source mesh name for the processed asset. Re-analyzing updates that asset in place, so placed actors keep working. */

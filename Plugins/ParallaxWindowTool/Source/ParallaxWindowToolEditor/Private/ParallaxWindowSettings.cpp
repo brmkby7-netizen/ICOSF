@@ -12,6 +12,7 @@ UParallaxWindowSettings::UParallaxWindowSettings()
 	, SquareAspectMax(1.1f)
 	, WindowDataUVChannel(2)
 	, bForceFullPrecisionUVs(true)
+	, ToolContentFolder(TEXT("/Game/ParallaxWindow"))
 	, OutputSuffix(TEXT("_Parallax"))
 	, bSaveAfterAnalyze(true)
 {
