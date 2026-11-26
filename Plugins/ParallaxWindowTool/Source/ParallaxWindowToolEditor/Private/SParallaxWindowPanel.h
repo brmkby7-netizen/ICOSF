@@ -24,6 +24,8 @@ public:
 
 private:
 	TArray<FAssetData> GetSelectedAssetsOfClass(UClass* Class) const;
+	/** Static meshes selected in the Content Browser, or else used by actors selected in the viewport. */
+	TArray<FAssetData> GetSelectedStaticMeshes() const;
 	bool HasMeshSelection() const;
 	FText GetSelectionText() const;
 	FText GetLibraryText() const;

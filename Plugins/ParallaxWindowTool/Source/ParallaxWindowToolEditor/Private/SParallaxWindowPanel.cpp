@@ -7,6 +7,9 @@
 #include "ContentBrowserModule.h"
 #include "Editor.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Selection.h"
+#include "Components/StaticMeshComponent.h"
+#include "GameFramework/Actor.h"
 #include "Engine/Texture2D.h"
 #include "IContentBrowserSingleton.h"
 #include "IDetailsView.h"
@@ -235,17 +238,48 @@ TArray<FAssetData> SParallaxWindowPanel::GetSelectedAssetsOfClass(UClass* Class)
 	return Selected;
 }
 
+TArray<FAssetData> SParallaxWindowPanel::GetSelectedStaticMeshes() const
+{
+	TArray<FAssetData> Result = GetSelectedAssetsOfClass(UStaticMesh::StaticClass());
+	if (Result.Num() > 0 || !GEditor)
+	{
+		return Result;
+	}
+
+	// Nothing in the Content Browser: use the meshes of the actors selected in the viewport.
+	TSet<UStaticMesh*> Meshes;
+	for (FSelectionIterator It(GEditor->GetSelectedActorIterator()); It; ++It)
+	{
+		if (const AActor* Actor = Cast<AActor>(*It))
+		{
+			TInlineComponentArray<UStaticMeshComponent*> Components(Actor);
+			for (const UStaticMeshComponent* Component : Components)
+			{
+				if (UStaticMesh* Mesh = Component ? Component->GetStaticMesh() : nullptr)
+				{
+					Meshes.Add(Mesh);
+				}
+			}
+		}
+	}
+	for (UStaticMesh* Mesh : Meshes)
+	{
+		Result.Add(FAssetData(Mesh));
+	}
+	return Result;
+}
+
 bool SParallaxWindowPanel::HasMeshSelection() const
 {
-	return GetSelectedAssetsOfClass(UStaticMesh::StaticClass()).Num() > 0;
+	return GetSelectedStaticMeshes().Num() > 0;
 }
 
 FText SParallaxWindowPanel::GetSelectionText() const
 {
-	const TArray<FAssetData> Selected = GetSelectedAssetsOfClass(UStaticMesh::StaticClass());
+	const TArray<FAssetData> Selected = GetSelectedStaticMeshes();
 	if (Selected.Num() == 0)
 	{
-		return LOCTEXT("NoSelection", "No static mesh selected in the Content Browser.");
+		return LOCTEXT("NoSelection", "Select a building in the viewport or a static mesh in the Content Browser.");
 	}
 	if (Selected.Num() == 1)
 	{
@@ -280,7 +314,7 @@ void SParallaxWindowPanel::SetReport(const FString& Report)
 
 FReply SParallaxWindowPanel::OnAnalyze()
 {
-	const TArray<FParallaxAnalyzeSummary> Results = FParallaxWindowAnalyzer::AnalyzeAssetsWithFeedback(GetSelectedAssetsOfClass(UStaticMesh::StaticClass()));
+	const TArray<FParallaxAnalyzeSummary> Results = FParallaxWindowAnalyzer::AnalyzeAssetsWithFeedback(GetSelectedStaticMeshes());
 	FString Report;
 	for (const FParallaxAnalyzeSummary& Summary : Results)
 	{
@@ -301,7 +335,7 @@ FReply SParallaxWindowPanel::OnBuildMaterials()
 FReply SParallaxWindowPanel::OnAssignMaterials()
 {
 	TArray<UStaticMesh*> Meshes;
-	for (const FAssetData& Asset : GetSelectedAssetsOfClass(UStaticMesh::StaticClass()))
+	for (const FAssetData& Asset : GetSelectedStaticMeshes())
 	{
 		if (UStaticMesh* Mesh = Cast<UStaticMesh>(Asset.GetAsset()))
 		{
