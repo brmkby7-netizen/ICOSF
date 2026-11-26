@@ -289,22 +289,3 @@ export async function sectionOf(surah, ayat, n) {
     return null;
   }
 }
-
-// ---------- Madinah Mushaf pages (604) ----------
-
-let pagesData = null;
-// The pages a surah spans, with the ayat of this surah on each: [{ page, from, to }]
-export async function pages(surah) {
-  if (!pagesData) {
-    pagesData = fetch(new URL('../data/pages.json', import.meta.url).href).then((r) => { if (!r.ok) throw new Error('pages'); return r.json(); });
-    pagesData.catch(() => { pagesData = null; });
-  }
-  const list = (await pagesData)[surah] || [];
-  const out = [];
-  list.forEach((pg, i) => {
-    const last = out[out.length - 1];
-    if (last && last.page === pg) last.to = i + 1;
-    else out.push({ page: pg, from: i + 1, to: i + 1 });
-  });
-  return out;
-}

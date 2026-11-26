@@ -69,6 +69,13 @@ export function setPlan(surah, plan) {
   return write('plans', plans);
 }
 
+// Test yourself: the last day each ayah was recited with no missed or wrong words { "surah:ayah": "YYYY-MM-DD" }
+export const getTested = () => read('tested', {});
+export const saveTested = (v) => write('tested', v);
+// Mushaf pages passed in a test (the part of the page in one surah): { "surah:page": "YYYY-MM-DD" }
+export const getPagesPassed = () => read('pagespassed', {});
+export const savePagesPassed = (v) => write('pagespassed', v);
+
 // Revision schedule: { "surah:ayah": { d: dueMs, s: stage, i: intervalDays, l: lapses, r: lastReviewMs, t: addedMs } }
 export const getReviews = () => read('reviews', {});
 export const saveReviews = (v) => write('reviews', v);

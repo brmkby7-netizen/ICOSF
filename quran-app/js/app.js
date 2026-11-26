@@ -8,6 +8,7 @@ import { ReciteSession } from './recite/session.js';
 import { ayahRef } from './recite/engine.js';
 import * as context from './context.js';
 import { searchReciters } from './search.js';
+import * as pages from './pages.js';
 import { $, esc, arNum, fmtDuration, maxContiguous, toast, icons } from './ui.js';
 
 const TOTAL_AYAT = 6236;
@@ -69,13 +70,13 @@ const progressBar = (p) => `<span class="bar" role="progressbar" aria-valuenow="
 async function route() {
   if (cleanup) { cleanup(); cleanup = null; }
   if (!player.session) hideBar();
-  const [page, arg] = location.hash.replace(/^#\/?/, '').split('/');
+  const [page, arg, arg2] = location.hash.replace(/^#\/?/, '').split('/');
   const tab = page === 'progress' || page === 'settings' ? page : page === 'today' || page === 'review' ? 'today' : '';
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('active', a.dataset.nav === tab);
   updateDueBadge();
   try {
     if (page === 'settings') settingsView();
-    else if (page === 'test') await testView(Number(arg));
+    else if (page === 'test') await testView(Number(arg), arg2);
     else if (page === 'today') await todayView();
     else if (page === 'review') await reviewView();
     else if (page === 'surah') await surahView(Number(arg));
@@ -157,7 +158,7 @@ async function surahView(n) {
   view.innerHTML = loading();
   await ensureChapters();
   const chapter = chapters[n - 1];
-  const [verses] = await Promise.all([api.getVerses(n), api.getReciters()]);
+  const [verses] = await Promise.all([api.getVerses(n), api.getReciters(), pages.load().catch(() => {})]);
   if (!settings.reciter || api.reciter(settings.reciter).id !== settings.reciter) saveSettings({ reciter: 'abkar' });
   if (player.session && player.session.meta.surah !== n) player.stop();
   current = { num: n, chapter, verses, timings: null, audioUrl: null };
@@ -200,11 +201,20 @@ function renderSurah() {
       </div>
       <div id="audio-status"></div>
       <div id="practice-controls" hidden>
-        <div class="list">
+        <div class="list" id="today-page-box" hidden>
+          <button type="button" class="row chev" id="today-page">
+            <span class="row-label">Today’s page</span>
+            <span class="row-value" id="today-page-value"></span>
+          </button>
+        </div>
+        <p class="list-footer" id="today-page-note"></p>
+        <div class="list range-list">
           <label class="row"><span class="row-label">From ayah</span><select id="from" class="row-select" data-v="${from}"></select></label>
           <label class="row"><span class="row-label">To ayah</span><select id="to" class="row-select" data-v="${to}"></select></label>
-          <label class="row" id="page-row" hidden><span class="row-label">Mushaf page</span><select id="page" class="row-select" aria-label="Mushaf page"></select></label>
+          <label class="row page-row" hidden><span class="row-label">From page</span><select id="from-page" class="row-select" aria-label="From page"></select></label>
+          <label class="row page-row" hidden><span class="row-label">To page</span><select id="to-page" class="row-select" aria-label="To page"></select></label>
         </div>
+        <section class="page-track" id="page-track" aria-label="Pages"></section>
         <section class="ctx" id="ctx" aria-label="Understand before you memorize"></section>
         <div class="list">
           <label class="row"><span class="row-label">Each ayah</span>
@@ -225,6 +235,8 @@ function renderSurah() {
           <button class="btn wide move-on" id="move-on" type="button"><span id="move-on-label"></span>${icons.next}</button>
           <p class="list-footer plan" id="move-on-plan"></p>
           <p class="list-footer move-on-meaning" id="move-on-meaning"></p>
+          <button class="btn wide next-page" id="next-page" type="button" hidden><span id="next-page-label"></span>${icons.next}</button>
+          <p class="list-footer plan" id="next-page-plan"></p>
         </div>
         <p class="list-footer plan" id="end-note" hidden></p>
       </div>
@@ -261,14 +273,18 @@ function renderSurah() {
   renderFavChips();
 
   for (const id of ['from', 'to', 'repeats', 'link', 'gap']) $(`#${id}`).addEventListener('change', updatePlan);
-  $('#page').addEventListener('change', (e) => {
-    const pg = current.pages?.find((x) => String(x.page) === e.target.value);
-    if (!pg) return;
-    const max = $('#to').options.length;
-    $('#from').value = String(pg.from);
-    $('#to').value = String(Math.min(pg.to, max));
-    updatePlan();
+  $('#from-page').addEventListener('change', (e) => pickPages('from', Number(e.target.value)));
+  $('#to-page').addEventListener('change', (e) => pickPages('to', Number(e.target.value)));
+  $('#today-page').addEventListener('click', () => {
+    const part = todayPart();
+    if (!part) return;
+    setRange(part.from, part.to);
   });
+  $('#page-track').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-test-range]');
+    if (b) location.hash = `#/test/${current.num}/${b.dataset.testRange}`;
+  });
+  $('#next-page').addEventListener('click', moveOnPage);
   $('#ctx').addEventListener('click', onContextClick);
   $('#start').addEventListener('click', startRange);
   $('#move-on').addEventListener('click', moveOn);
@@ -446,8 +462,8 @@ async function loadAudioState() {
 
   fillRangeSelects(marked);
   controls.hidden = false;
+  fillPageSelects(marked);
   updatePlan();
-  fillPageSelect(marked);
   return true;
 }
 
@@ -561,7 +577,16 @@ function updatePlan() {
     showMeaningOf(r.to + 1, $('#move-on-meaning'));
   }
   if (movedTo && movedTo !== r.to) movedTo = 0;
-  syncPage(r);
+  const np = canMove ? nextPageOf(r) : null;
+  $('#next-page').hidden = !np;
+  $('#next-page-plan').textContent = '';
+  if (np) {
+    $('#next-page-label').textContent = np.rest ? `Rest of page ${np.page}: ayat ${span(np.from, np.to)}` : `Next page: page ${np.page}`;
+    $('#next-page-plan').textContent = `${np.rest ? '' : `Ayat ${span(np.from, np.to)}, `}built up ayah by ayah, then on repeat until you move on. Ayat ${span(r.from, r.to)} go to your revision.`;
+  }
+  syncPages(r);
+  renderPageTrack(r);
+  updateTodayPage(r);
   updateContext(r);
   const atEnd = started && r.to >= current.verses.length;
   const end = $('#end-note');
@@ -877,30 +902,126 @@ function showMeaningOf(n, el, surah = current?.num, verses = current?.verses) {
   });
 }
 
-// ---------- pick by Mushaf page ----------
+// ---------- Mushaf pages: pick by page, today's page, page tracker ----------
 
-async function fillPageSelect(max) {
-  const num = current.num;
-  let list;
-  try { list = await context.pages(num); } catch { return; }
-  if (current?.num !== num || !$('#page')) return;
-  current.pages = list;
-  $('#page').innerHTML = `<option value="" id="page-none"></option>` + list.map((pg) => `
-    <option value="${pg.page}" ${pg.from > max ? 'disabled' : ''}>Page ${pg.page} · ${pg.from === Math.min(pg.to, max) ? `ayah ${pg.from}` : `ayat ${span(pg.from, Math.min(pg.to, max))}`}</option>`).join('');
-  $('#page-row').hidden = false;
-  syncPage(readRange());
+const maxAyah = () => $('#to').options.length;
+
+function setRange(from, to) {
+  $('#from').value = String(from);
+  $('#to').value = String(to);
+  movedTo = 0;
+  updatePlan();
 }
 
-// Show the page the range is on; select it when the range is exactly that page
-function syncPage(r) {
-  const sel = $('#page');
-  if (!sel || !current.pages) return;
-  const max = $('#to').options.length;
-  const hit = current.pages.find((pg) => pg.from === r.from && Math.min(pg.to, max) === r.to);
-  const on = current.pages.filter((pg) => pg.from <= r.to && pg.to >= r.from).map((pg) => pg.page);
-  const none = $('#page-none');
-  if (none) none.textContent = on.length > 1 ? `Pages ${on[0]}–${on.at(-1)}` : on.length ? `On page ${on[0]}` : 'Choose';
-  sel.value = hit ? String(hit.page) : '';
+function fillPageSelects(max) {
+  const list = pages.pagesOf(current.num);
+  for (const row of document.querySelectorAll('.page-row')) row.hidden = !list.length;
+  if (!list.length) return;
+  const opts = list.map((pg) => `<option value="${pg.page}" ${pg.from > max ? 'disabled' : ''}>Page ${pg.page}</option>`).join('');
+  $('#from-page').innerHTML = opts;
+  $('#to-page').innerHTML = opts;
+}
+
+// From page: the range starts at the top of that page; To page: it ends at the bottom of that page
+function pickPages(which, page) {
+  const part = pages.partOf(current.num, page);
+  if (!part) return;
+  const max = maxAyah();
+  let { from, to } = readRange();
+  if (which === 'from') { from = part.from; if (to < from) to = Math.min(part.to, max); }
+  else { to = Math.min(part.to, max); if (from > to) from = part.from; }
+  setRange(from, to);
+}
+
+function syncPages(r) {
+  if (!$('#from-page')?.options.length) return;
+  $('#from-page').value = String(pages.pageOf(current.num, r.from));
+  $('#to-page').value = String(pages.pageOf(current.num, r.to));
+}
+
+const todayPart = () => pages.nextToLearn(current.num, store.getMemorizedSet(current.num), maxAyah());
+
+function fmtPages(x) {
+  const whole = Math.floor(x + 0.001), rest = x - whole;
+  const frac = rest < 0.15 ? '' : rest < 0.4 ? '¼' : rest < 0.6 ? '½' : rest < 0.85 ? '¾' : '';
+  const n = rest >= 0.85 ? whole + 1 : whole;
+  return `${n || !frac ? n : ''}${frac}`;
+}
+
+function updateTodayPage(r) {
+  const box = $('#today-page-box');
+  if (!box) return;
+  const part = todayPart();
+  const done = pages.passedToday();
+  box.hidden = !part;
+  if (part) {
+    const on = part.from === r.from && part.to === r.to;
+    $('#today-page-value').textContent = on ? `Page ${part.page} · selected` : `Page ${part.page} · ayat ${span(part.from, part.to)}`;
+    $('#today-page').classList.toggle('selected', on);
+  }
+  $('#today-page-note').textContent = done >= 0.15
+    ? `You passed ${fmtPages(done)} ${done > 1.1 ? 'pages' : 'page'} today. Masha’Allah!`
+    : part ? 'The next page you haven’t passed. A page counts when you recite all of it in Test yourself with no mistakes.' : '';
+}
+
+const fmtDay = (d) => (d === pages.today() ? 'today' : new Date(`${d}T12:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }));
+
+// Each page the range touches: its ayat as a bar (green = recited in a test with no mistakes), and whether it counts yet
+function renderPageTrack(r) {
+  const box = $('#page-track');
+  if (!box || !current) return;
+  const list = pages.partsIn(current.num, r.from, r.to);
+  if (!list.length) { box.innerHTML = ''; return; }
+  const num = current.num;
+  const rows = list.slice(0, 4).map((part) => {
+    const st = pages.status(num, part);
+    const segs = [];
+    for (let a = part.from; a <= part.to; a++) {
+      const len = Math.max(8, current.verses[a - 1]?.text.length || 30);
+      const cls = `${pages.isClean(num, a) ? ' clean' : ''}${a >= r.from && a <= r.to ? ' in' : ''}`;
+      segs.push(`<i class="seg${cls}" style="flex-grow:${len}" title="Ayah ${a}"></i>`);
+    }
+    const state = st.passed
+      ? `<span class="pt-state done">${icons.check}Passed ${fmtDay(st.passed)}</span>`
+      : `<span class="pt-state">${st.clean} of ${st.total} recited without mistakes</span>`;
+    return `<div class="pt-page">
+      <div class="pt-head"><span class="pt-title">Page ${part.page}</span><span class="pt-sub">${part.from === part.to ? `ayah ${part.from}` : `ayat ${span(part.from, part.to)}`}</span>${state}</div>
+      <div class="pt-bar" aria-hidden="true">${segs.join('')}</div>
+      ${!st.passed ? `<button type="button" class="link pt-test" data-test-range="${part.from}-${part.to}">${icons.mic}Test page ${part.page}</button>` : ''}
+    </div>`;
+  });
+  box.innerHTML = `<h2 class="list-header">Page progress</h2>
+    <div class="list">${rows.join('')}</div>
+    ${list.length > 4 ? `<p class="list-footer">…and ${list.length - 4} more pages.</p>` : ''}`;
+}
+
+// "Next page": the page after the range (or the rest of the page the range ends in)
+function nextPageOf(r) {
+  const max = maxAyah();
+  const a = r.to + 1;
+  if (a > max) return null;
+  const part = pages.partOf(current.num, pages.pageOf(current.num, a));
+  if (!part) return null;
+  return { page: part.page, from: a, to: Math.min(part.to, max), rest: a > part.from };
+}
+
+async function moveOnPage() {
+  const r = readRange();
+  const np = nextPageOf(r);
+  if (!np) return;
+  const left = [];
+  for (let a = r.from; a <= r.to; a++) left.push(a);
+  if (revision.addNew(current.num, left)) {
+    updateDueBadge();
+    toast(`Ayat ${span(r.from, r.to)} moved to your revision. On to page ${np.page}.`);
+  }
+  const next = { ...r, from: np.from, to: np.to };
+  $('#from').value = String(next.from);
+  $('#to').value = String(next.to);
+  rememberRange(next);
+  movedTo = 0;
+  updatePlan();
+  await startSession({ steps: rangeSteps(next), gap: r.gap, title: `page ${np.page}`, range: true, loop: { from: next.from, to: next.to } });
 }
 
 async function playOne(n) {
@@ -990,20 +1111,24 @@ const displayWords = (v) => v.text.split(/\s+/).filter((t) => t && !/^[۞۩]+$/.
 
 let testSession = null;
 
-async function testView(n) {
+// #/test/N tests the practice range; #/test/N/10-17 tests ayat 10–17 (e.g. "Test page 23")
+async function testView(n, rangeArg) {
   if (!(n >= 1 && n <= 114)) { location.hash = '#/'; return; }
   view.innerHTML = loading();
   await ensureChapters();
   if (player.session) player.stop();
   const chapter = chapters[n - 1];
-  const plan = store.getPlan(n) || { from: 1, to: Math.min(5, chapter.verses_count) };
-  const [verses, phon] = await Promise.all([api.getVerses(n), api.getPhonetic(n)]);
+  const m = /^(\d+)-(\d+)$/.exec(rangeArg || '');
+  const plan = m ? { from: Math.max(1, +m[1]), to: Math.min(chapter.verses_count, +m[2]) } : store.getPlan(n) || { from: 1, to: Math.min(5, chapter.verses_count) };
+  const [verses, phon] = await Promise.all([api.getVerses(n), api.getPhonetic(n), pages.load().catch(() => {})]);
   const range = verses.filter((v) => v.n >= plan.from && v.n <= plan.to);
+  const onPages = pages.partsIn(n, plan.from, plan.to).map((p) => p.page);
+  const pagesLabel = onPages.length > 1 ? ` · pages ${onPages[0]}–${onPages.at(-1)}` : onPages.length ? ` · page ${onPages[0]}` : '';
 
   const header = `
     <a href="#/surah/${n}" class="back">${icons.back}<span>${esc(chapter.name_simple)}</span></a>
     <h1 class="large-title">Test yourself</h1>
-    <p class="muted subtitle">${esc(chapter.name_simple)} · ${plan.from === plan.to ? `ayah ${plan.from}` : `ayat ${plan.from}–${plan.to}`}</p>`;
+    <p class="muted subtitle">${esc(chapter.name_simple)} · ${plan.from === plan.to ? `ayah ${plan.from}` : `ayat ${plan.from}–${plan.to}`}${pagesLabel}</p>`;
 
   if (!(await recite.isDownloaded())) {
     view.innerHTML = `${header}
@@ -1055,6 +1180,7 @@ async function testView(n) {
   const ayat = range.map((v) => ({ ref: ayahRef(phon.ayat[v.n - 1], phon.kinds, phon.rules), verse: v }));
   const status = (t) => { const el = $('#mic-status'); if (el) el.textContent = t; };
   const lastNotes = new Map(); // "i:k" → notes, for tap-to-explain
+  let lastResults = null;       // the finished test, so a false alarm can be cleared
 
   // a hint while reciting: the meaning of the ayah you're on
   $('#t-hint').addEventListener('click', () => {
@@ -1088,17 +1214,33 @@ async function testView(n) {
 
 
   $('#t-list').addEventListener('click', (e) => {
+    // "I said this correctly": the speech model can be wrong; you decide, and the result is checked again
+    const accept = e.target.closest('[data-accept]');
+    if (accept && lastResults && !testSession) {
+      const [i, k] = accept.dataset.accept.split(':').map(Number);
+      lastResults[i][k] = { verdict: 'ok', notes: [], accepted: true };
+      lastNotes.delete(`${i}:${k}`);
+      paint(i, lastResults[i]);
+      accept.closest('.t-note').hidden = true;
+      finish(lastResults);
+      return;
+    }
     const el = e.target.closest('.w');
     if (!el) return;
     const art = el.closest('.t-ayah');
-    const notes = lastNotes.get(`${art.dataset.i}:${el.dataset.k}`);
+    const key = `${art.dataset.i}:${el.dataset.k}`;
+    const notes = lastNotes.get(key);
     const note = art.querySelector('.t-note');
     if (!notes) { note.hidden = true; return; }
+    const w = lastResults?.[Number(art.dataset.i)]?.[Number(el.dataset.k)];
+    const red = !testSession && w && (w.verdict === 'wrong' || w.verdict === 'missed');
     note.hidden = false;
-    note.innerHTML = `<span class="ar">${esc(el.textContent)}</span> ${notes.map((x) => esc(x.msg)).join(' · ')}`;
+    note.innerHTML = `<span class="ar">${esc(el.textContent)}</span> ${notes.map((x) => esc(x.msg)).join(' · ')}`
+      + (red ? ` <button type="button" class="link accept" data-accept="${key}">I said this correctly</button>` : '');
   });
 
   const finish = (results) => {
+    lastResults = results;
     document.body.classList.remove('listening');
     $('#mic').innerHTML = icons.mic;
     $('#mic').setAttribute('aria-label', 'Start again');
@@ -1108,10 +1250,25 @@ async function testView(n) {
     const taj = all.filter((w) => w.verdict === 'tajweed').length;
     const weak = results.map((ws, i) => (ws.some((w) => w.verdict === 'missed' || w.verdict === 'wrong') ? range[i].n : null)).filter(Boolean);
     status('Tap the microphone to try again');
+    // Mushaf pages: a page counts when all of it was recited here with no missed or wrong words
+    let pageNotes = '';
+    if (all.length) {
+      const reached = results.map((ws, i) => ({ n: range[i].n, ws })).filter((x) => x.ws.some((w) => w.verdict !== 'pending'));
+      const pg = pages.recordTest(n, reached.map((x) => ({ n: x.n, clean: x.ws.every((w) => w.verdict === 'ok' || w.verdict === 'tajweed') })));
+      const notes = [];
+      if (pg.counted.length) notes.push(`<p class="page-pass">${icons.check}${pg.counted.length > 1 ? `Pages ${pg.counted.map((p) => p.page).join(' and ')} passed` : `Page ${pg.counted[0].page} passed`}. ${pg.counted.length > 1 ? 'They count' : 'It counts'} as memorized.</p>`);
+      for (const p of pg.notYet) {
+        if (pages.status(n, p).passed) continue;
+        if (p.whole) notes.push(`<p class="muted">Page ${p.page}: ${p.slips.length === 1 ? `ayah ${p.slips[0]} had` : `ayat ${p.slips.join(', ')} had`} missed or wrong words. Recite the page again without mistakes to count it. (If a red word was right, tap it and choose “I said this correctly”.)</p>`);
+        else notes.push(`<p class="muted">Page ${p.page} is ayat ${span(p.from, p.to)}; this test covered part of it. <a href="#/test/${n}/${p.from}-${p.to}">Test page ${p.page}</a> to count it.</p>`);
+      }
+      pageNotes = notes.join('');
+    }
     $('#test-summary').innerHTML = all.length ? `
       <div class="card summary">
         <p class="summary-big">${ok} of ${all.length} words</p>
         <p class="muted">${bad ? `${bad} missed or wrong` : 'No missed words. Masha’Allah!'}${taj ? ` · ${taj} tajweed ${taj === 1 ? 'point' : 'points'}` : ''}</p>
+        ${pageNotes ? `<div class="page-notes">${pageNotes}</div>` : ''}
         ${weak.length ? `<button class="btn small-btn" id="weak-rev" type="button">Revise ayat ${weak.join(', ')} tomorrow</button>` : ''}
       </div>` : '';
     $('#weak-rev')?.addEventListener('click', (e) => {
@@ -1131,6 +1288,7 @@ async function testView(n) {
     view.querySelectorAll('.w').forEach((el) => { el.className = 'w w-pending'; });
     view.querySelectorAll('.t-note, .t-meaning').forEach((el) => { el.hidden = true; });
     lastNotes.clear();
+    lastResults = null;
     $('#test-summary').innerHTML = '';
     setCurrent(0);
     testSession = new ReciteSession(ayat, {
@@ -1722,7 +1880,7 @@ bar.addEventListener('click', (e) => {
 
 // ---------- settings ----------
 
-const APP_VERSION = '2026.11.23-1';
+const APP_VERSION = '2026.11.26-1';
 
 const selectRow = (name, label, options, value) => `
   <label class="row">

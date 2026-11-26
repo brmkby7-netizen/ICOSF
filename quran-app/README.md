@@ -18,7 +18,13 @@ A small installable web app (PWA) for memorizing the Quran ayah by ayah. You can
   - **Move on** shows the meaning of the next ayah before you add it, and says when it starts a new section. After moving on, the card leads with the new ayah.
   - **Meaning hints**: in Test yourself ("Meaning" shows the current ayah's translation) and in revision ("Meaning", next to "First word": the first ayah's translation and the passage's flow).
   - The texts are loaded from Quran.com when needed (they aren't bundled), and stay available offline once loaded. Ibn Kathir's sections are matched to ayat by the Arabic they quote: 99.9% of ayat fall in a section (surah 105 has no Ibn Kathir text on Quran.com, so only Tazkirul Quran is shown there).
-- **Pick by Mushaf page**: choose a page of the Madinah Mushaf (604 pages) and the range becomes the ayat of this surah on that page. The row also tells you which page your range is on.
+- **Pages (Madinah Mushaf, 604 pages)**, for a goal like one page a day:
+  - **Today's page**: one tap sets the range to the next page of the surah you haven't passed yet (pages whose ayat you ticked ✓ are skipped). Below it: how much you passed today.
+  - **From page / To page**, next to From ayah / To ayah: pick whole pages and the ayat follow.
+  - **Page progress** under the range: each page the range touches, as a bar of its ayat (green = recited in Test yourself with no mistakes), "Passed" once it counts, and **Test page N** to test exactly that page.
+  - **A page counts** when you recite all of it (the part in the open surah) in Test yourself with no missed or wrong words; tajweed notes don't stop a pass. The test summary says which pages passed, which had slips, and which were only partly covered. The speech model sometimes marks a correct word red: tap it and choose **I said this correctly**, and the result is checked again.
+  - **Next page**, next to Move on: on to the following page (or the rest of the page the range ends in), built up ayah by ayah, then on repeat; the ayat you leave go to your revision.
+  - Pages that hold the end of one surah and the start of the next are handled one surah at a time.
 - **Move on**: when you're ready, the range slides forward by one ayah without starting over. You read the new ayah (6) ×3, then the new range (2–6) together, on repeat until you move on again. Move on is always on the player bar while a range plays. The range is saved per surah, so you can pick up another day. There's an optional pause after each repeat so you can recite.
 - **Today's revision** (spaced repetition): when Move on drops an ayah from the range, it joins your revision automatically. It comes back later that day, the next morning, then after 2, 3 and 7 days, then roughly doubling, but never longer than a maximum gap (30 days by default). Ayat you tick ✓ as already memorized join the long-term rotation; ticking a whole surah spreads it over two weeks. The Today tab lists due passages, old revision first, up to a daily limit, and says when you're behind. Each review: recite from memory (with an optional first-word hint or Listen), reveal, tap any ayah you slipped on (it comes back tomorrow), then grade Forgot / Hard / Good / Easy. Progress shows ayat in revision and weak spots.
 - **Fix an ayah's timing** (any reciter): tap the clock icon next to an ayah to nudge its start or end, listen to check, or play around the ayah and tap "Start is here" / "End is here". Neighbouring edges can move with it; fixes are saved per reciter and can be reset.
@@ -69,6 +75,7 @@ js/marker.js          tap-to-mark ayah timings
 js/revision.js        revision scheduler (spaced repetition) and today's plan
 js/context.js         classical tafsir for a range: flow, story, brief, full text; Mushaf pages
 js/search.js          reciter search (English and Arabic, spelling-tolerant)
+js/pages.js           Mushaf pages: ayat per page, pages passed in tests, today's page
 js/recite/            recitation check: engine (rules), mel (spectrogram), worker (model), mic, session, client
 models/tajweed-v2/    speech model (Apache-2.0, see NOTICE.md)
 vendor/onnxruntime-web/  ONNX Runtime Web 1.30 (MIT)
