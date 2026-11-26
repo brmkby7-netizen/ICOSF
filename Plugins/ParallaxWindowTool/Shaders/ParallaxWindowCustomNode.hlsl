@@ -6,6 +6,7 @@
 //
 // Conventions (set by the Analyze step):
 //   UV            0-1 per window, upright, bottom-left origin (v grows upwards)
+//   WindowSize    window width / height in cm
 //   WindowData.x        window random ID in [0,1)     WindowData.y  floor index
 // The window frame is rebuilt here from the vertex normal and the mesh's up axis, so
 // the result does not depend on mesh tangents.
@@ -34,7 +35,18 @@ if (SeedF == 0.0)
 {
 	SeedU = PWRand.Pcg(asuint(ObjPosFrac.x) ^ PWRand.Pcg(asuint(ObjPosFrac.y) ^ PWRand.Pcg(asuint(ObjPosFrac.z) ^ asuint(InstanceRandom))));
 }
+// ---------------------------------------------------------------- Room tiling
+// A window wider than Max Room Width (or taller than Max Room Height) is split into several rooms,
+// each with its own texture, light and blinds. 0 = off. WindowSize is the window's size in cm (from Analyze).
+float2 Tiles = float2(1.0, 1.0);
+if (MaxRoomWidth > 1.0 && WindowSize.x > 0.0)  { Tiles.x = max(1.0, ceil(WindowSize.x / MaxRoomWidth - 0.001)); }
+if (MaxRoomHeight > 1.0 && WindowSize.y > 0.0) { Tiles.y = max(1.0, ceil(WindowSize.y / MaxRoomHeight - 0.001)); }
+float2 TiledUV = UV * Tiles;
+float2 Cell = clamp(floor(TiledUV), 0.0, Tiles - 1.0);
+float2 CellUV = TiledUV - Cell;
+
 uint IdU = uint(WindowData.x * 16777216.0 + 0.5);
+IdU ^= PWRand.Pcg(uint(Cell.x) * 73856093u ^ uint(Cell.y) * 19349663u);
 uint FloorU = uint(max(WindowData.y, 0.0) + 0.5) * 2654435761u + 977u;
 
 // ---------------------------------------------------------------- Global controls (Material Parameter Collection)
@@ -62,9 +74,9 @@ float3 V = -CamVec;                                           // camera -> pixel
 float3 DirTS = float3(dot(V, Rt), dot(V, Up), dot(V, N));     // z < 0 points into the room
 float NdotV = saturate(dot(N, CamVec));
 
-float2 WinUV = saturate(UV);
-float2 Gx = ddx(UV);
-float2 Gy = ddy(UV);
+float2 WinUV = saturate(CellUV);
+float2 Gx = ddx(TiledUV);
+float2 Gy = ddy(TiledUV);
 
 // ---------------------------------------------------------------- Room texture (Texture 2D Array)
 uint RoomW, RoomH, RoomCount;

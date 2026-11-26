@@ -75,6 +75,10 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "UVs", meta = (ClampMin = "1", ClampMax = "7"))
 	int32 WindowDataUVChannel;
 
+	/** UV channel that receives the window's real size in cm (width, height). Used by the material's Max Room Width / Height tiling. */
+	UPROPERTY(config, EditAnywhere, Category = "UVs", meta = (ClampMin = "1", ClampMax = "7"))
+	int32 WindowSizeUVChannel;
+
 	/** Force full precision (32-bit) UVs on the processed mesh so random IDs and floor indices are not rounded by 16-bit UVs. Nanite meshes are unaffected. */
 	UPROPERTY(config, EditAnywhere, Category = "UVs")
 	bool bForceFullPrecisionUVs;

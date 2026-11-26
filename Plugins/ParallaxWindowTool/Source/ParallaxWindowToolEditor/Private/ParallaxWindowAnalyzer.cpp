@@ -258,10 +258,27 @@ FParallaxAnalyzeSummary FParallaxWindowAnalyzer::AnalyzeStaticMesh(UStaticMesh* 
 			Out.Warnings.Add(FString::Printf(TEXT("UV channel %d is this mesh's lightmap channel; glass UVs in it will be replaced with window data."), DataChannel));
 		}
 	}
-	if (UVs.GetNumChannels() < DataChannel + 1)
+	const int32 SizeChannel = FMath::Clamp(S.WindowSizeUVChannel, 1, 7);
+	if (SizeChannel == DataChannel)
 	{
-		UVs.SetNumChannels(DataChannel + 1);
-		MD.SetNumUVChannels(DataChannel + 1);
+		return Fail(TEXT("Window Data UV Channel and Window Size UV Channel must be different."));
+	}
+	{
+		const FMeshBuildSettings& SourceBuild = Source->GetSourceModel(0).BuildSettings;
+		if (SourceBuild.bGenerateLightmapUVs && SourceBuild.DstLightmapIndex == SizeChannel)
+		{
+			return Fail(FString::Printf(TEXT("Lightmap UVs are generated into channel %d, which is the Window Size UV Channel. Change one of them."), SizeChannel));
+		}
+		if (!SourceBuild.bGenerateLightmapUVs && Source->GetLightMapCoordinateIndex() == SizeChannel && UVs.GetNumChannels() > SizeChannel)
+		{
+			Out.Warnings.Add(FString::Printf(TEXT("UV channel %d is this mesh's lightmap channel; glass UVs in it will be replaced with window sizes."), SizeChannel));
+		}
+	}
+	const int32 NeededChannels = FMath::Max(DataChannel, SizeChannel) + 1;
+	if (UVs.GetNumChannels() < NeededChannels)
+	{
+		UVs.SetNumChannels(NeededChannels);
+		MD.SetNumUVChannels(NeededChannels);
 	}
 
 	// Final material list: source slots + one slot per class. The glass slot stays for skipped panes.
@@ -481,6 +498,8 @@ FParallaxAnalyzeSummary FParallaxWindowAnalyzer::AnalyzeStaticMesh(UStaticMesh* 
 				UVs.Set(InstanceID, 0, FVector2f(FMath::Clamp(U0, 0.f, 1.f), FMath::Clamp(V0, 0.f, 1.f)));
 				// Window data: x = random ID, y = floor index.
 				UVs.Set(InstanceID, DataChannel, FVector2f(RandomId, static_cast<float>(FloorIndex)));
+				// Window size in cm, for room tiling in the material.
+				UVs.Set(InstanceID, SizeChannel, FVector2f(static_cast<float>(Width), static_cast<float>(Height)));
 			}
 		}
 		if (bShared && SharedVertexWarnings++ < 10)

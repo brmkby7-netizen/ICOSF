@@ -415,6 +415,8 @@ namespace ParallaxWindowBuilderPrivate
 		UV0->CoordinateIndex = 0;
 		UMaterialExpressionTextureCoordinate* UVData = CastChecked<UMaterialExpressionTextureCoordinate>(Create(UMaterialExpressionTextureCoordinate::StaticClass()));
 		UVData->CoordinateIndex = FMath::Clamp(GetDefault<UParallaxWindowSettings>()->WindowDataUVChannel, 1, 7);
+		UMaterialExpressionTextureCoordinate* UVSize = CastChecked<UMaterialExpressionTextureCoordinate>(Create(UMaterialExpressionTextureCoordinate::StaticClass()));
+		UVSize->CoordinateIndex = FMath::Clamp(GetDefault<UParallaxWindowSettings>()->WindowSizeUVChannel, 1, 7);
 
 		UMaterialExpression* CameraVector = Create(UMaterialExpressionCameraVectorWS::StaticClass());
 		UMaterialExpression* VertexNormal = Create(UMaterialExpressionVertexNormalWS::StaticClass());
@@ -452,6 +454,8 @@ namespace ParallaxWindowBuilderPrivate
 		// --- Parameters
 		UMaterialExpression* Room = TextureArray(RoomTextures, DefaultRooms, TEXT("01 Room"));
 		UMaterialExpression* Depth = Scalar(RoomDepth, 0.5f, TEXT("01 Room"), 0.05f, 0.95f);
+		UMaterialExpression* MaxRoomW = Scalar(TEXT("Max Room Width"), 400.f, TEXT("01 Room"), 0.f, 2000.f);
+		UMaterialExpression* MaxRoomH = Scalar(TEXT("Max Room Height"), 0.f, TEXT("01 Room"), 0.f, 2000.f);
 
 		UMaterialExpression* Lit = Scalar(LitPercent, 0.4f, TEXT("02 Lighting"), 0.f, 1.f);
 		UMaterialExpression* Warm = Scalar(WarmRatio, 0.7f, TEXT("02 Lighting"), 0.f, 1.f);
@@ -492,6 +496,9 @@ namespace ParallaxWindowBuilderPrivate
 		{
 			{ TEXT("UV"), UV0, 0 },
 			{ TEXT("WindowData"), UVData, 0 },
+			{ TEXT("WindowSize"), UVSize, 0 },
+			{ TEXT("MaxRoomWidth"), MaxRoomW, 0 },
+			{ TEXT("MaxRoomHeight"), MaxRoomH, 0 },
 			{ TEXT("CamVec"), CameraVector, 0 },
 			{ TEXT("NormalWS"), VertexNormal, 0 },
 			{ TEXT("UpWS"), UpToWorld, 0 },
