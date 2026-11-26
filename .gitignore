@@ -1,5 +1,6 @@
+*.pyc
+ParallaxWindowTool*.zip
+ParallaxWindowTool.zip
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
 __pycache__/
-*.pyc
-ParallaxWindowTool.zip
